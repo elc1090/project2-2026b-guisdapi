@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.core.database import connect_to_mongo, close_mongo_connection
-from app.routes import teachers, auth
+from app.routes import teachers, auth, classrooms
 
 # esse gerenciador de contexto controla o que acontece quando o servidor liga e desliga
 @asynccontextmanager
@@ -20,6 +20,7 @@ app = FastAPI(
 #inclusão das rotas
 app.include_router(teachers.router)
 app.include_router(auth.router)
+app.include_router(classrooms.router)
 
 @app.get("/")
 def read_root():
