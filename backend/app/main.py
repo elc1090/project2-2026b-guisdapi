@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.core.database import connect_to_mongo, close_mongo_connection
+from app.routes import teachers, auth
 
-# Esse gerenciador de contexto controla o que acontece quando o servidor liga e desliga
+# esse gerenciador de contexto controla o que acontece quando o servidor liga e desliga
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo() # Liga o banco
@@ -15,6 +16,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+#inclusão das rotas
+app.include_router(teachers.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def read_root():
