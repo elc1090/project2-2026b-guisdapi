@@ -11,13 +11,20 @@ const MIN_VISIBLE = 4;
 function Dashboard() {
   const navigate = useNavigate();
   
+  // Estados de busca do banco de dados
   const [challenge, setChallenge] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Estados da interação do aluno
   const [selectedOption, setSelectedOption] = useState(null);
   const [reasoning, setReasoning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Estados da submissão gamificada
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState(null);
 
+  // Estados do carrossel/calendário
   const currentDate = new Date();
   const todayDay = currentDate.getDate();
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
@@ -50,7 +57,7 @@ function Dashboard() {
     }
   }, [visibleCount, todayDay]);
 
-  // 2. O Motor de Busca (dispara ao carregar a página)
+  // Busca o desafio ao carregar a página
   useEffect(() => {
     const fetchChallenge = async () => {
       try {
@@ -60,10 +67,8 @@ function Dashboard() {
           return;
         }
         
-        // Chamamos a função nova que não precisa do ID na URL
         const data = await challengesService.getTodayChallenge();
         setChallenge(data);
-
       } catch (error) {
         console.error("Erro ao buscar desafio:", error);
       } finally {
@@ -74,6 +79,28 @@ function Dashboard() {
     fetchChallenge();
   }, [navigate]);
 
+  // Função disparada ao clicar em INJETAR_RESPOSTA
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      // Pega o texto exato da alternativa escolhida
+      const optionText = challenge.options[selectedOption];
+      
+      // Envia para o backend
+      const result = await challengesService.submitAnswer(challenge.id, optionText, reasoning);
+      
+      // Guarda a pontuação e aciona a tela de sucesso
+      setSubmissionResult(result);
+      setHasSubmitted(true);
+    } catch (error) {
+      console.error(error);
+      alert("ERRO_ DE CONEXÃO. O servidor recusou a injeção de dados.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Funções de arrastar o mouse do calendário
   const handleMouseDown = (e) => {
     setIsDragging(true);
     setStartX(e.pageX - sliderRef.current.offsetLeft);
@@ -116,7 +143,7 @@ function Dashboard() {
             [ TURMA: WEB-2026 ]
           </div>
           <div className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors">
-            <span>&gt; ALUNO</span>
+            <span>&gt; GUILHERME</span>
             <div className="bg-current text-black h-5 w-5 flex items-center justify-center text-[10px]">👤</div>
           </div>
         </div>
@@ -186,7 +213,52 @@ function Dashboard() {
               Nenhum desafio encontrado para a sua turma hoje.
             </p>
           </div>
+        ) : hasSubmitted && submissionResult ? (
+          
+          /* TELA DE RESULTADOS GAMIFICADA */
+          <div className={`border-[4px] shadow-[8px_8px_0px_0px] p-12 text-center flex flex-col items-center animate-fade-in-up ${
+            submissionResult.is_correct 
+              ? 'bg-black border-[var(--color-acid-green)] shadow-[var(--color-acid-green)]' 
+              : 'bg-black border-[var(--color-cyber-magenta)] shadow-[var(--color-cyber-magenta)]'
+          }`}>
+            <div className={`text-6xl mb-6 ${submissionResult.is_correct ? 'text-[var(--color-acid-green)]' : 'text-[var(--color-cyber-magenta)]'}`}>
+              {submissionResult.is_correct ? '✔️' : '❌'}
+            </div>
+            
+            <h2 className={`font-display text-3xl md:text-5xl font-black uppercase tracking-tighter ${
+              submissionResult.is_correct ? 'text-[var(--color-acid-green)]' : 'text-[var(--color-cyber-magenta)]'
+            }`}>
+              {submissionResult.is_correct ? 'ACESSO_CONCEDIDO' : 'FALHA_CRÍTICA'}
+            </h2>
+            
+            <div className={`w-16 h-[4px] my-6 ${submissionResult.is_correct ? 'bg-[var(--color-acid-green)]' : 'bg-[var(--color-cyber-magenta)]'}`}></div>
+            
+            {!submissionResult.is_correct && (
+              <p className="font-mono text-white mt-2 uppercase tracking-widest leading-relaxed">
+                A RESPOSTA CORRETA ERA:<br/>
+                <span className="text-[var(--color-acid-green)] font-black">[{submissionResult.correct_answer}]</span>
+              </p>
+            )}
+
+            <div className="mt-8 flex gap-6 font-mono font-black text-xl md:text-2xl">
+              <div className="flex flex-col items-center border-[2px] border-white p-4">
+                <span className="text-xs text-gray-400 mb-2 tracking-widest">XP_GANHO</span>
+                <span className="text-[var(--color-cyber-cyan)]">+{submissionResult.score_earned}</span>
+              </div>
+              <div className="flex flex-col items-center border-[2px] border-white p-4">
+                <span className="text-xs text-gray-400 mb-2 tracking-widest">STREAK</span>
+                <span className="text-orange-500">{submissionResult.streak_updated} 🔥</span>
+              </div>
+            </div>
+            
+            <p className="font-mono text-gray-500 text-xs mt-8 uppercase tracking-widest">
+              [ STATUS: RESPOSTA REGISTRADA. AGUARDE O PRÓXIMO CICLO. ]
+            </p>
+          </div>
+
         ) : (
+          
+          /* CARTÃO DO DESAFIO DO DIA */
           <div className="bg-black border-[4px] border-[var(--color-acid-green)] shadow-[8px_8px_0px_0px_var(--color-acid-green)] overflow-hidden flex flex-col">
             
             <div className="bg-[var(--color-acid-green)] border-b-[4px] border-[var(--color-acid-green)] px-4 py-2 flex justify-between items-center">
@@ -217,7 +289,6 @@ function Dashboard() {
               </pre>
             </div>
 
-            {/* Alternativas vindas do Banco */}
             <div className="p-6 md:p-8 bg-black">
               <p className="font-mono text-[var(--color-acid-green)] font-bold text-sm tracking-widest mb-6 uppercase">
                 &gt; ESCOLHA A RESPOSTA CORRETA:
@@ -249,7 +320,7 @@ function Dashboard() {
                 })}
               </div>
 
-              {/* Área da Justificativa (Aparece só quando clica numa opção) */}
+              {/* Área da Justificativa e Envio */}
               {selectedOption !== null && (
                 <div className="mt-8 animate-fade-in-up">
                   <p className="font-mono text-[var(--color-cyber-magenta)] font-bold text-sm tracking-widest mb-4 uppercase">
@@ -258,15 +329,16 @@ function Dashboard() {
                   <textarea
                     value={reasoning}
                     onChange={(e) => setReasoning(e.target.value)}
-                    placeholder="DIGITE SEU RACIOCÍNIO AQUI..."
+                    placeholder="DIGITE SEU RACIOCÍNIO AQUI (MIN. 10 CARACTERES)..."
                     className="w-full h-32 bg-[#050505] border-[2px] border-[var(--color-cyber-magenta)] text-[var(--color-cyber-magenta)] p-4 font-mono text-sm uppercase placeholder:text-[#440044] focus:outline-none focus:border-white focus:text-white transition-colors resize-none"
                   />
                   
                   <button 
-                    disabled={reasoning.trim().length < 10}
+                    onClick={handleSubmit}
+                    disabled={reasoning.trim().length < 10 || isSubmitting}
                     className="mt-6 w-full bg-[var(--color-cyber-magenta)] text-white font-display font-black text-2xl uppercase py-4 border-[3px] border-[var(--color-cyber-magenta)] hover:bg-black hover:text-[var(--color-cyber-magenta)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    INJETAR_RESPOSTA
+                    {isSubmitting ? "PROCESSANDO..." : "INJETAR_RESPOSTA"}
                   </button>
                 </div>
               )}
