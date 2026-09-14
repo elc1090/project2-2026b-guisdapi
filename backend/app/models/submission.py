@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 # define o esquema de entrada enviado pelo aluno
 class SubmissionCreate(BaseModel):
@@ -12,6 +13,16 @@ class SubmissionResponse(BaseModel):
     correct_answer: str
     streak_updated: int
     score_earned: int = 0
+
+# define o esquema de saida para a tela de resultados do professor
+class SubmissionTeacherResponse(BaseModel):
+    id: str
+    student_name: str
+    option_selected: str
+    reasoning: str
+    is_correct: bool
+    score_earned: int
+    submitted_at: datetime
 
     class Config:
         populate_by_name = True

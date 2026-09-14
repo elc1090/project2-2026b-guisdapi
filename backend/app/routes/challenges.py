@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.challenge import ChallengeCreate, ChallengeResponse, ChallengeStudentResponse
 from app.core.database import get_database
 from app.core.dependencies import get_current_teacher_id, get_current_student_data
+from app.models.submission import SubmissionTeacherResponse
 from bson import ObjectId
 from datetime import datetime, timezone
 
@@ -84,3 +85,56 @@ async def get_today_challenge(student_data: dict = Depends(get_current_student_d
 
     challenge["id"] = str(challenge["_id"])
     return challenge
+
+@router.get("/{challenge_id}/submissions", response_model=list[SubmissionTeacherResponse])
+async def get_challenge_submissions(
+    challenge_id: str,
+    teacher_id: str = Depends(get_current_teacher_id) # exige token do professor
+):
+    """
+    endpoint para o professor visualizar todas as respostas e raciocinios de um desafio especifico.
+    """
+    db = get_database()
+
+    try:
+        obj_challenge_id = ObjectId(challenge_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="id do desafio invalido")
+
+    # 1. busca o desafio para descobrir de qual turma ele eh
+    challenge = await db["challenges"].find_one({"_id": obj_challenge_id})
+    if not challenge:
+        raise HTTPException(status_code=404, detail="desafio nao encontrado")
+
+    # 2. seguranca: garante que o professor logado seja o dono da turma que criou o desafio
+    classroom = await db["classrooms"].find_one({
+        "_id": ObjectId(challenge["classroom_id"]),
+        "teacher_id": teacher_id
+    })
+    
+    if not classroom:
+        raise HTTPException(status_code=403, detail="voce nao tem permissao para ver os dados desta turma")
+
+    # 3. busca todas as submissoes feitas para este desafio
+    cursor = db["submissions"].find({"challenge_id": challenge_id})
+    submissions_list = await cursor.to_list(length=100) # limite de 100 alunos para seguranca de memoria
+
+    # 4. enriquece os dados: para cada submissao, busca o nome do aluno no banco
+    resultado_final = []
+    for sub in submissions_list:
+        student = await db["students"].find_one({"_id": ObjectId(sub["student_id"])})
+        
+        # se por acaso o aluno foi deletado, usa "Aluno Desconhecido"
+        nome_aluno = student["name"] if student else "Aluno Desconhecido"
+        
+        resultado_final.append({
+            "id": str(sub["_id"]),
+            "student_name": nome_aluno,
+            "option_selected": sub["option_selected"],
+            "reasoning": sub["reasoning"],
+            "is_correct": sub["is_correct"],
+            "score_earned": sub.get("score_earned", 0),
+            "submitted_at": sub["submitted_at"]
+        })
+
+    return resultado_final
