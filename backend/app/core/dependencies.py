@@ -1,30 +1,57 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.core.database import settings
 
-# define o esquema de autenticacao integrado ao swagger
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+# mudança de oauth2passwordbearer para httpbearer (permite colar qualquer token no swagger)
+security = HTTPBearer()
 
-async def get_current_teacher_id(token: str = Depends(oauth2_scheme)) -> str:
-    # tenta decodificar o jwt usando a chave secreta do servidor
+async def get_current_teacher_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    # extrai a string do token de dentro do objeto credentials
+    token = credentials.credentials
+    
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         user_id: str = payload.get("sub")
         role: str = payload.get("role")
 
-        # valida a existencia do payload e o cargo de professor
         if user_id is None or role != "teacher":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="credenciais invalidas"
+                detail="credenciais invalidas para professor"
             )
 
-        # retorna o id do professor extraido do token
         return user_id
         
     except JWTError:
-        # captura falhas de decodificacao ou tokens expirados
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="token invalido ou expirado"
+        )
+
+
+async def get_current_student_data(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    # extrai a string do token de dentro do objeto credentials
+    token = credentials.credentials
+    
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id: str = payload.get("sub")
+        role: str = payload.get("role")
+        classroom_id: str = payload.get("classroom_id")
+
+        if user_id is None or role != "student":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="credenciais invalidas para aluno"
+            )
+
+        return {
+            "student_id": user_id, 
+            "classroom_id": classroom_id
+        }
+        
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="token invalido ou expirado"

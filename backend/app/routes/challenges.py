@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.models.challenge import ChallengeCreate, ChallengeResponse
+from app.models.challenge import ChallengeCreate, ChallengeResponse, ChallengeStudentResponse
 from app.core.database import get_database
-from app.core.dependencies import get_current_teacher_id
+from app.core.dependencies import get_current_teacher_id, get_current_student_data
 from bson import ObjectId
 from datetime import datetime
 
@@ -53,3 +53,31 @@ async def create_challenge(
     challenge_dict["id"] = str(result.inserted_id)
     
     return challenge_dict
+
+# atencao ao response_model: e ele quem apaga a resposta correta!
+@router.get("/today", response_model=ChallengeStudentResponse)
+async def get_today_challenge(student_data: dict = Depends(get_current_student_data)):
+    """
+    endpoint para o aluno buscar o desafio disponivel na data de hoje.
+    """
+    db = get_database()
+
+    # descobre qual e a data exata de hoje a meia-noite para casar com o banco
+    today = datetime.combine(datetime.today(), datetime.min.time())
+
+    # cruza o id da turma que veio escondido no token com a data de hoje
+    challenge = await db["challenges"].find_one({
+        "classroom_id": student_data["classroom_id"],
+        "scheduled_date": today
+    })
+
+    if not challenge:
+        raise HTTPException(
+            status_code=404, 
+            detail="nenhum desafio publicado para hoje na sua turma"
+        )
+
+    # formata o id para envio
+    challenge["id"] = str(challenge["_id"])
+    
+    return challenge
