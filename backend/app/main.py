@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.database import connect_to_mongo, close_mongo_connection
 from app.routes import teachers, auth, classrooms, students, challenges, submissions
@@ -15,6 +16,15 @@ app = FastAPI(
     description="API para gestão de turmas e desafios",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Configuração do CORS para permitir requisições do frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Portas padrão do Vite
+    allow_credentials=True,
+    allow_methods=["*"], # Permite GET, POST, PUT, DELETE, etc.
+    allow_headers=["*"], # Permite enviar o Token JWT no cabeçalho
 )
 
 #inclusão das rotas
