@@ -11,9 +11,12 @@ const MIN_VISIBLE = 4;
 function Dashboard() {
   const navigate = useNavigate();
   
-  // 1. Novos estados para controlar o banco de dados
   const [challenge, setChallenge] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [reasoning, setReasoning] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentDate = new Date();
   const todayDay = currentDate.getDate();
@@ -214,18 +217,28 @@ function Dashboard() {
               </pre>
             </div>
 
+            {/* Alternativas vindas do Banco */}
             <div className="p-6 md:p-8 bg-black">
               <p className="font-mono text-[var(--color-acid-green)] font-bold text-sm tracking-widest mb-6 uppercase">
                 &gt; ESCOLHA A RESPOSTA CORRETA:
               </p>
               
               <div className="flex flex-col gap-4 font-sans">
-                {/* Lendo a lista simples de strings do modelo Pydantic */}
                 {challenge.options.map((optionText, index) => {
                   const letra = String.fromCharCode(65 + index);
+                  const isSelected = selectedOption === index;
+                  
                   return (
-                    <button key={index} className="flex items-center w-full text-left bg-black border-[3px] border-[#333] text-gray-400 p-3 md:p-4 hover:border-[var(--color-cyber-magenta)] hover:text-white transition-all group">
-                      <div className="font-mono font-black w-10 shrink-0 text-xl group-hover:text-[var(--color-cyber-magenta)] transition-colors">
+                    <button 
+                      key={index} 
+                      onClick={() => setSelectedOption(index)}
+                      className={`flex items-center w-full text-left border-[3px] p-3 md:p-4 transition-all group ${
+                        isSelected 
+                          ? 'bg-[#001100] border-[var(--color-acid-green)] text-white shadow-[4px_4px_0px_0px_var(--color-acid-green)] translate-y-[-2px] translate-x-[-2px]' 
+                          : 'bg-black border-[#333] text-gray-400 hover:border-[var(--color-cyber-magenta)] hover:text-white'
+                      }`}
+                    >
+                      <div className={`font-mono font-black w-10 shrink-0 text-xl transition-colors ${isSelected ? 'text-[var(--color-acid-green)]' : 'group-hover:text-[var(--color-cyber-magenta)]'}`}>
                         [ {letra} ]
                       </div>
                       <span className="ml-2 font-bold uppercase tracking-wide">
@@ -235,6 +248,28 @@ function Dashboard() {
                   );
                 })}
               </div>
+
+              {/* Área da Justificativa (Aparece só quando clica numa opção) */}
+              {selectedOption !== null && (
+                <div className="mt-8 animate-fade-in-up">
+                  <p className="font-mono text-[var(--color-cyber-magenta)] font-bold text-sm tracking-widest mb-4 uppercase">
+                    &gt; JUSTIFIQUE SUA ESCOLHA_
+                  </p>
+                  <textarea
+                    value={reasoning}
+                    onChange={(e) => setReasoning(e.target.value)}
+                    placeholder="DIGITE SEU RACIOCÍNIO AQUI..."
+                    className="w-full h-32 bg-[#050505] border-[2px] border-[var(--color-cyber-magenta)] text-[var(--color-cyber-magenta)] p-4 font-mono text-sm uppercase placeholder:text-[#440044] focus:outline-none focus:border-white focus:text-white transition-colors resize-none"
+                  />
+                  
+                  <button 
+                    disabled={reasoning.trim().length < 10}
+                    className="mt-6 w-full bg-[var(--color-cyber-magenta)] text-white font-display font-black text-2xl uppercase py-4 border-[3px] border-[var(--color-cyber-magenta)] hover:bg-black hover:text-[var(--color-cyber-magenta)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    INJETAR_RESPOSTA
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
