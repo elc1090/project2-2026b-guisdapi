@@ -19,12 +19,16 @@ export default function Login() {
       let data;
       if (role === 'student') {
         data = await authService.studentLogin(identifier, password);
+        localStorage.setItem('@DesafioDoDia:token', data.access_token);
+        
+        navigate('/dashboard'); 
+        
       } else {
         data = await authService.teacherLogin(identifier, password);
+        localStorage.setItem('@DesafioDoDia:token', data.access_token);
+        
+        navigate('/teacher-dashboard'); 
       }
-      
-      localStorage.setItem('@DesafioDoDia:token', data.access_token);
-      navigate('/dashboard');
       
     } catch (error) {
       setErrorMsg('ERRO: CREDENCIAIS INVÁLIDAS OU CORROMPIDAS.');
