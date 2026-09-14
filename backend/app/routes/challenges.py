@@ -3,7 +3,7 @@ from app.models.challenge import ChallengeCreate, ChallengeResponse, ChallengeSt
 from app.core.database import get_database
 from app.core.dependencies import get_current_teacher_id, get_current_student_data
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/challenges", tags=["Desafios"])
 
@@ -57,27 +57,30 @@ async def create_challenge(
 # atencao ao response_model: e ele quem apaga a resposta correta!
 @router.get("/today", response_model=ChallengeStudentResponse)
 async def get_today_challenge(student_data: dict = Depends(get_current_student_data)):
-    """
-    endpoint para o aluno buscar o desafio disponivel na data de hoje.
-    """
     db = get_database()
+    
+    hoje = datetime.now(timezone.utc).date()
+    today = datetime.combine(hoje, datetime.min.time())
 
-    # descobre qual e a data exata de hoje a meia-noite para casar com o banco
-    today = datetime.combine(datetime.today(), datetime.min.time())
-
-    # cruza o id da turma que veio escondido no token com a data de hoje
     challenge = await db["challenges"].find_one({
         "classroom_id": student_data["classroom_id"],
         "scheduled_date": today
     })
 
     if not challenge:
-        raise HTTPException(
-            status_code=404, 
-            detail="nenhum desafio publicado para hoje na sua turma"
-        )
+        raise HTTPException(status_code=404, detail="nenhum desafio publicado para hoje na sua turma")
 
-    # formata o id para envio
+    view_record = await db["challenge_views"].find_one({
+        "challenge_id": str(challenge["_id"]),
+        "student_id": student_data["student_id"]
+    })
+
+    if not view_record:
+        await db["challenge_views"].insert_one({
+            "challenge_id": str(challenge["_id"]),
+            "student_id": student_data["student_id"],
+            "viewed_at": datetime.now(timezone.utc)
+        })
+
     challenge["id"] = str(challenge["_id"])
-    
     return challenge
