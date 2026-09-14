@@ -18,12 +18,18 @@ export const authService = {
   // login do professor: FastAPI espera um FORMULARIO na rota /auth/login
   teacherLogin: async (email, password) => {
     try {
+      // monta os dados simulando um formulário HTML clássico
       const params = new URLSearchParams();
-      params.append('username', email); // oauth2 exige o nome 'username'
+      params.append('username', email); // FastAPI exige que a chave seja 'username'
       params.append('password', password);
 
-      // corrigida a URL para bater com o router do FastAPI
-      const response = await api.post('/auth/login', params); 
+      // envia forçando o cabeçalho de formulário (urlencoded)
+      const response = await api.post('/auth/login', params, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      
       return response.data;
     } catch (error) {
       console.error("erro no login do professor:", error);
