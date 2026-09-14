@@ -138,3 +138,40 @@ async def get_challenge_submissions(
         })
 
     return resultado_final
+
+@router.get("/classroom/{classroom_id}", response_model=list[ChallengeResponse])
+async def get_classroom_challenges(
+    classroom_id: str,
+    teacher_id: str = Depends(get_current_teacher_id) 
+):
+    """
+    endpoint para o professor ver todos os desafios que ele criou para uma turma.
+    """
+    db = get_database()
+
+    try:
+        obj_classroom_id = ObjectId(classroom_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="formato de id da turma invalido")
+
+    # 1. verifica se a turma existe e se pertence ao professor logado
+    classroom = await db["classrooms"].find_one({
+        "_id": obj_classroom_id, 
+        "teacher_id": teacher_id
+    })
+    
+    if not classroom:
+        raise HTTPException(
+            status_code=403, 
+            detail="turma nao encontrada ou voce nao tem permissao para acessa-la"
+        )
+
+    # 2. busca todos os desafios linkados a esta turma (ordenados do mais recente pro mais antigo)
+    cursor = db["challenges"].find({"classroom_id": classroom_id}).sort("scheduled_date", -1)
+    challenges_list = await cursor.to_list(length=100)
+
+    # 3. formata o campo _id para id para o Pydantic validar corretamente
+    for challenge in challenges_list:
+        challenge["id"] = str(challenge["_id"])
+
+    return challenges_list
