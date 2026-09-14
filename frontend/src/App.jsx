@@ -1,11 +1,20 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+
 function App() {
   return (
-    <div className="flex h-screen items-center justify-center">
-      <button className="bg-acid-green border-4 border-black font-bold text-xl py-3 px-6 rounded-xl shadow-brutal active:translate-x-1 active:translate-y-1 active:shadow-none transition-all">
-        TESTE BRUTALISTA
-      </button>
-    </div>
-  )
+    <BrowserRouter>
+      <Routes>
+        {/* Se acessar a raiz do site, joga direto pro login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        
+        {/* Nossas duas páginas principais */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;

@@ -1,12 +1,20 @@
-/* Importação moderna do Tailwind v4 */
 @import "tailwindcss";
 
-/* Injetando a nossa paleta Neo-brutalista no tema nativo */
 @theme {
-  --color-acid-green: #a3e635;
-  --shadow-brutal: 4px 4px 0px 0px rgba(0,0,0,1);
+  --color-acid-green: #00FF66; /* Aquele verde fósforo vibrante da sua imagem */
+  --color-cyber-dark: #050505; /* Preto quase absoluto para dar contraste */
+  --color-cyber-magenta: #FF00FF; /* Um tom de magenta para detalhes */
+  --color-cyber-cyan: #00FFFF; /* Ciano clássico de terminal */
+  
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif; /* Usaremos 'font-display' para os títulos colossais */
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --shadow-brutal-green: 4px 4px 0px 0px #00FF66;
+  --shadow-brutal-magenta: 4px 4px 0px 0px #FF00FF;
 }
 
 body {
-  background-color: #f8fafc;
-} 
+  background-color: var(--color-cyber-dark);
+  color: white;
+}
