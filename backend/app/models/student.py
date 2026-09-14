@@ -18,5 +18,11 @@ class StudentResponse(BaseModel):
     streak: int = 0
     last_submission_date: Optional[date] = None
 
+# define o esquema de saida para o ranking da turma (esconde dados sensiveis)
+class StudentRankingResponse(BaseModel):
+    name: str
+    score: int = 0
+    streak: int = 0
+
     class Config:
         populate_by_name = True

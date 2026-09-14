@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
-from app.models.student import StudentCreate, StudentResponse
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.models.student import StudentCreate, StudentResponse, StudentRankingResponse
 from app.core.database import get_database
 from app.core.security import get_password_hash
+from app.core.dependencies import get_current_student_data
 
 router = APIRouter(prefix="/students", tags=["Alunos"])
 
@@ -47,3 +48,22 @@ async def create_student(student: StudentCreate):
     # 6. anexa o id gerado e retorna os dados seguros para o frontend
     student_dict["id"] = str(result.inserted_id)
     return student_dict
+
+@router.get("/ranking", response_model=list[StudentRankingResponse])
+async def get_classroom_ranking(student_data: dict = Depends(get_current_student_data)):
+    """
+    endpoint para listar os 10 melhores alunos da turma do usuario logado.
+    """
+    db = get_database()
+    
+    # 1. filtra apenas os alunos que pertencem a mesma turma do aluno que fez a requisicao
+    # 2. ordena primeiro pela pontuacao (score) decrescente (-1) e em caso de empate, pelo streak decrescente (-1)
+    # 3. limita o resultado aos 10 primeiros para nao sobrecarregar a rede
+    cursor = db["students"].find(
+        {"classroom_id": student_data["classroom_id"]}
+    ).sort([("score", -1), ("streak", -1)]).limit(10)
+    
+    # converte o cursor do mongodb para uma lista do python
+    ranking = await cursor.to_list(length=10)
+    
+    return ranking
