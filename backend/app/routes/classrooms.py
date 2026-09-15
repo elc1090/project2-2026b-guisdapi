@@ -36,3 +36,24 @@ async def create_classroom(
     # converte o objectid e formata o retorno
     classroom_dict["id"] = str(result.inserted_id)
     return classroom_dict
+
+@router.get("/", response_model=list[ClassroomResponse])
+async def get_teacher_classrooms(
+    teacher_id: str = Depends(get_current_teacher_id)
+):
+    """
+    endpoint protegido para listar todas as turmas do professor logado.
+    """
+    db = get_database()
+    
+    # realiza a query buscando apenas turmas pertencentes ao professor autenticado
+    cursor = db["classrooms"].find({"teacher_id": teacher_id})
+    
+    # converte o cursor em lista, limitando a 100 registros por segurança de memória
+    classrooms_list = await cursor.to_list(length=100)
+    
+    # mapeia o _id do mongodb para o campo id esperado pelo schema do pydantic
+    for classroom in classrooms_list:
+        classroom["id"] = str(classroom["_id"])
+        
+    return classrooms_list
