@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -18,13 +20,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
 # Configuração do CORS para permitir requisições do frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Portas padrão do Vite
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173",
+        FRONTEND_URL # Aqui entra o link da sua Vercel no futuro!
+    ], 
     allow_credentials=True,
-    allow_methods=["*"], # Permite GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"], # Permite enviar o Token JWT no cabeçalho
+    allow_methods=["*"], 
+    allow_headers=["*"], 
 )
 
 #inclusão das rotas

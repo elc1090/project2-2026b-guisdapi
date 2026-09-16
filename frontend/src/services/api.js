@@ -1,16 +1,14 @@
 import axios from 'axios';
 
-// cria uma instancia base do axios apontando para o nosso FastAPI
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export const api = axios.create({
-  baseURL: 'http://localhost:8000', // a porta em que o seu backend Python está rodando
+  baseURL: API_URL, 
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// interceptador de requisicao: o toque de mestre da arquitetura!
-// ele intercepta TODAS as chamadas para a API antes de saírem do frontend
-// e anexa automaticamente o "crachá" (Token JWT) se o aluno estiver logado.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('@DesafioDoDia:token'); 
   
