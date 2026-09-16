@@ -34,27 +34,57 @@ async def create_submission(
 
     is_correct = (submission.option_selected == challenge["correct_answer"])
 
-    # --- LOGICA TEMPORAL E GAMIFICACAO ---
-    score_earned = 10 # pontuacao base de participacao (se errar)
+# --- LOGICA TEMPORAL E GAMIFICACAO ---
+    hoje = datetime.now(timezone.utc).date()
+    data_desafio = challenge["scheduled_date"].date()
+    is_desafio_atrasado = data_desafio < hoje
 
-    if is_correct:
-        view_record = await db["challenge_views"].find_one({
-            "challenge_id": challenge_id,
-            "student_id": student_data["student_id"]
-        })
+    student = await db["students"].find_one({"_id": ObjectId(student_data["student_id"])})
+    streak_atual = student.get("streak", 0)
+    ultima_submissao = student.get("last_submission_date")
+
+    # 1. Verifica se a ofensiva quebrou (mais de 1 dia de diferenca)
+    if ultima_submissao:
+        # Pega apenas a data (sem horas) para comparar com 'hoje'
+        data_ultima = ultima_submissao.replace(tzinfo=timezone.utc).date()
+        dias_passados = (hoje - data_ultima).days
+
+        if dias_passados > 1:
+            streak_atual = 0 # O aluno faltou um dia, a ofensiva zera!
+
+    # 2. Calcula pontos e nova ofensiva
+    score_earned = 10 # pontuacao base de participacao
+    novo_streak = streak_atual
+    data_para_salvar = ultima_submissao # Mantem a data antiga por padrao
+
+    if is_desafio_atrasado:
+        # Desafio do passado: nao altera o streak, nem registra como "presenca do dia"
+        if is_correct:
+            score_earned = 50
+    else:
+        # Desafio do dia: o aluno marcou presenca, ganha +1 de ofensiva
+        novo_streak = streak_atual + 1
+        # Atualiza a data para salvar apenas se for o desafio de hoje
+        data_para_salvar = datetime.combine(hoje, datetime.min.time()) 
         
-        if view_record:
-            agora = datetime.now(timezone.utc)
+        if is_correct:
+            # Logica de decaimento de pontos pelo tempo (reaproveitada)
+            view_record = await db["challenge_views"].find_one({
+                "challenge_id": challenge_id,
+                "student_id": student_data["student_id"]
+            })
             
-            hora_visualizacao = view_record["viewed_at"].replace(tzinfo=timezone.utc)
-            
-            time_elapsed = (agora - hora_visualizacao).total_seconds()
-            
-            pontos_calculados = int(100 - (time_elapsed / 2))
-            score_earned = max(50, min(100, pontos_calculados))
-        else:
-            score_earned = 50 
-            
+            if view_record:
+                agora = datetime.now(timezone.utc)
+                hora_visualizacao = view_record["viewed_at"].replace(tzinfo=timezone.utc)
+                time_elapsed = (agora - hora_visualizacao).total_seconds()
+                
+                pontos_calculados = int(100 - (time_elapsed / 2))
+                score_earned = max(50, min(100, pontos_calculados))
+            else:
+                score_earned = 50
+
+    # prepara o dicionario da submissao
     submission_dict = submission.model_dump()
     submission_dict["challenge_id"] = challenge_id
     submission_dict["student_id"] = student_data["student_id"]
@@ -63,22 +93,18 @@ async def create_submission(
     submission_dict["score_earned"] = score_earned
     submission_dict["submitted_at"] = datetime.now(timezone.utc)
 
+    # insere no banco
     result = await db["submissions"].insert_one(submission_dict)
 
-    student = await db["students"].find_one({"_id": ObjectId(student_data["student_id"])})
-    novo_streak = student.get("streak", 0) + 1
-    pontuacao_total = student.get("score", 0) + score_earned 
-    
-    
-    hoje = datetime.now(timezone.utc).date()
-    hoje_datetime = datetime.combine(hoje, datetime.min.time())
+    # 3. Salva os novos dados do aluno
+    pontuacao_total = student.get("score", 0) + score_earned
     
     await db["students"].update_one(
         {"_id": ObjectId(student_data["student_id"])},
         {"$set": {
             "streak": novo_streak, 
             "score": pontuacao_total,
-            "last_submission_date": hoje_datetime
+            "last_submission_date": data_para_salvar # Salva a data processada!
         }}
     )
 

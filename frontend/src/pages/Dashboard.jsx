@@ -46,6 +46,9 @@ function Dashboard() {
   // === estados da timeline ===
   const [timelineData, setTimelineData] = useState(null);
 
+  // === estado de readonly (para quando o aluno já respondeu o desafio) ===
+  const [isReadOnly, setIsReadOnly] = useState(false);
+
   // mapeia o histórico para acesso O(1) pela data (ex: '2026-09-12' -> {...dados})
   const historyMap = useMemo(() => {
     if (!timelineData?.history) return {};
@@ -99,15 +102,28 @@ function Dashboard() {
           navigate('/login');
           return;
         }
-
-        // disparamos as duas chamadas ao mesmo tempo para ganhar performance
+        
         const [todayData, timelineResponse] = await Promise.all([
-          challengesService.getTodayChallenge().catch(() => null), // catch interno pra não quebrar a tela se não tiver desafio hoje
+          challengesService.getTodayChallenge().catch(() => null),
           studentService.getTimeline()
         ]);
 
-        if (todayData) setChallenge(todayData);
         setTimelineData(timelineResponse);
+
+        if (todayData) {
+          setChallenge(todayData);
+          
+          // Verifica se o desafio de hoje JÁ FOI respondido
+          const todayHistory = timelineResponse.history.find(h => h.challenge_id === todayData.id);
+          
+          if (todayHistory && todayHistory.has_submitted) {
+            // Se já respondeu, apenas bloqueia a tela em modo leitura!
+            setIsReadOnly(true);
+            setHasSubmitted(false); // Garante que a tela de resultado não esconda a questão
+          } else {
+            setIsReadOnly(false);
+          }
+        }
       } catch (error) {
         console.error("erro ao sincronizar dashboard:", error);
       } finally {
@@ -157,6 +173,37 @@ function Dashboard() {
   const trackWidth = visibleCount * ITEM_SLOT - ITEM_GAP;
   const sidePadding = Math.max(0, trackWidth / 2 - ITEM_WIDTH / 2);
 
+// acionado ao clicar em qualquer dia no carrossel
+  const handleDayClick = async (day, dayData, isToday) => {
+    if (!dayData && !isToday) return;
+
+    setLoading(true);
+    setSelectedOption(null);
+    setReasoning('');
+    setIsSubmitting(false);
+    setHasSubmitted(false); // Sempre remove a tela final ao trocar de dia!
+
+    try {
+      if (isToday) {
+        const todayData = await challengesService.getTodayChallenge();
+        setChallenge(todayData);
+        // Se já respondeu hoje, bloqueia
+        setIsReadOnly(dayData?.has_submitted || false);
+      } else {
+        const pastChallenge = await challengesService.getChallengeById(dayData.challenge_id);
+        setChallenge(pastChallenge);
+        // Dias passados SEMPRE ficam bloqueados, respondidos ou não
+        setIsReadOnly(true); 
+      }
+    } catch (error) {
+      console.error(error);
+      alert("ERRO_ Não foi possível carregar este desafio.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  
   return (
     <div
       className="min-h-screen bg-[var(--color-cyber-dark)] py-8 md:py-12 font-sans text-white overflow-x-hidden relative"
@@ -171,47 +218,38 @@ function Dashboard() {
         </h1>
       </div>
 
-      <header className="relative z-10 max-w-5xl mx-auto px-8 md:px-12 flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
-        <h1 className="font-display text-4xl font-black tracking-tighter uppercase text-[var(--color-acid-green)]">
+      <header className="relative z-10 max-w-6xl mx-auto px-6 md:px-12 flex flex-col lg:flex-row justify-between items-center mb-12 gap-6">
+        <h1 className="font-display text-4xl font-black tracking-tighter uppercase text-[var(--color-acid-green)] whitespace-nowrap">
           DESAFIO_DO_DIA
         </h1>
+        
+        <div className="flex flex-wrap items-center justify-center lg:justify-end gap-3 font-mono font-bold text-xs tracking-widest uppercase">
+          
+          <div className="flex items-center h-10 border-[3px] border-orange-500 bg-black text-orange-500 px-4 whitespace-nowrap">
+            [ STREAK: {timelineData?.streak || 0} 🔥 ]
+          </div>
 
-        <div className="flex items-center gap-4 font-mono font-bold text-xs tracking-widest uppercase">
-          <div className="flex items-center h-10 border-[3px] border-[var(--color-acid-green)] bg-black text-[var(--color-acid-green)] px-4">
-            [ TURMA: WEB-2026 ]
-          </div>
-          <div className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors">
-            <div 
-            onClick={() => { localStorage.removeItem('@DesafioDoDia:token'); navigate('/login'); }}
-            className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors"
-          >
-            <span className="truncate max-w-[150px] uppercase">
-              &gt; {timelineData?.student_name || 'ALUNO'}
-            </span>
-          </div>
-            <div className="bg-current text-black h-5 w-5 flex items-center justify-center text-[10px]">👤</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 font-mono font-bold text-xs tracking-widest uppercase flex-wrap justify-end">
-          {/* botão do ranking */}
           <button
             onClick={handleOpenRanking}
-            className="flex items-center h-10 border-[3px] border-yellow-400 bg-yellow-400 text-black px-4 hover:bg-transparent hover:text-yellow-400 transition-colors shadow-[4px_4px_0px_0px_rgba(250,204,21,0.5)]"
+            className="flex items-center h-10 border-[3px] border-yellow-400 bg-yellow-400 text-black px-4 hover:bg-transparent hover:text-yellow-400 transition-colors shadow-[4px_4px_0px_0px_rgba(250,204,21,0.5)] whitespace-nowrap"
           >
             [ RANKING ]
           </button>
 
-          <div className="flex items-center h-10 border-[3px] border-[var(--color-acid-green)] bg-black text-[var(--color-acid-green)] px-4 hidden md:flex">
+          <div className="hidden md:flex items-center h-10 border-[3px] border-[var(--color-acid-green)] bg-black text-[var(--color-acid-green)] px-4 whitespace-nowrap">
             [ TURMA: ATIVA ]
           </div>
 
-          <div
-            onClick={() => { localStorage.removeItem('@DesafioDoDia:token'); navigate('/login'); }}
-            className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors"
-          >
-            <span>&gt; SAIR</span>
+          <div className="flex items-center h-10 gap-2 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 whitespace-nowrap">
+            <span>&gt; {timelineData?.student_name || 'ALUNO'}</span>
           </div>
+
+          <button
+            onClick={() => { localStorage.removeItem('@DesafioDoDia:token'); navigate('/login'); }}
+            className="flex items-center h-10 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-white hover:bg-[var(--color-cyber-magenta)] transition-colors px-4 whitespace-nowrap cursor-pointer"
+          >
+            &gt; SAIR
+          </button>
         </div>
       </header>
 
@@ -261,16 +299,21 @@ function Dashboard() {
             }
 
             return (
-              <div key={day} id={isToday ? 'day-today' : `day-${day}`} className="flex flex-col items-center shrink-0">
-                <div className={circleClasses}>
-                  {day}
-                  {/* se o aluno concluiu, bota o foguinho da ofensiva */}
-                  {dayData?.has_submitted && <span className="absolute -bottom-3 -right-3 text-lg drop-shadow-md pointer-events-none">🔥</span>}
+                <div 
+                  key={day} 
+                  id={isToday ? 'day-today' : `day-${day}`} 
+                  className="flex flex-col items-center shrink-0 cursor-pointer hover:scale-110 transition-transform"
+                  onClick={() => handleDayClick(day, dayData, isToday)}
+                >
+                  <div className={circleClasses}>
+                    {day}
+                    {/* se o aluno concluiu, bota o foguinho da ofensiva */}
+                    {dayData?.has_submitted && <span className="absolute -bottom-3 -right-3 text-lg drop-shadow-md pointer-events-none">🔥</span>}
+                  </div>
+                  {isToday && <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-white mt-3"></div>}
                 </div>
-                {isToday && <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-white mt-3"></div>}
-              </div>
-            );
-          })}
+              );
+            })}
         </div>
       </div>
 
@@ -376,18 +419,20 @@ function Dashboard() {
                 {challenge.options.map((optionText, index) => {
                   const letra = String.fromCharCode(65 + index);
                   const isSelected = selectedOption === index;
-
                   return (
                     <button
                       key={index}
+                      disabled={isReadOnly}
                       onClick={() => setSelectedOption(index)}
                       className={`flex items-center w-full text-left border-[3px] p-3 md:p-4 transition-all group ${
                         isSelected
                           ? 'bg-[#001100] border-[var(--color-acid-green)] text-white shadow-[4px_4px_0px_0px_var(--color-acid-green)] translate-y-[-2px] translate-x-[-2px]'
-                          : 'bg-black border-[#333] text-gray-400 hover:border-[var(--color-cyber-magenta)] hover:text-white'
+                          : isReadOnly
+                          ? 'bg-black border-[#333] text-gray-600 cursor-not-allowed'
+                          : 'bg-black border-[#333] text-gray-400 hover:border-[var(--color-cyber-magenta)] hover:text-white cursor-pointer'
                       }`}
                     >
-                      <div className={`font-mono font-black w-10 shrink-0 text-xl transition-colors ${isSelected ? 'text-[var(--color-acid-green)]' : 'group-hover:text-[var(--color-cyber-magenta)]'}`}>
+                      <div className={`font-mono font-black w-10 shrink-0 text-xl transition-colors ${isSelected ? 'text-[var(--color-acid-green)]' : isReadOnly ? 'text-gray-600' : 'group-hover:text-[var(--color-cyber-magenta)]'}`}>
                         [ {letra} ]
                       </div>
                       <span className="ml-2 font-bold uppercase tracking-wide">
@@ -398,8 +443,8 @@ function Dashboard() {
                 })}
               </div>
 
-              {/* área da justificativa e envio */}
-              {selectedOption !== null && (
+              {/* área da justificativa e envio NORMAL */}
+              {selectedOption !== null && !isReadOnly && (
                 <div className="mt-8 animate-fade-in-up">
                   <p className="font-mono text-[var(--color-cyber-magenta)] font-bold text-sm tracking-widest mb-4 uppercase">
                     &gt; JUSTIFIQUE SUA ESCOLHA_
@@ -410,7 +455,6 @@ function Dashboard() {
                     placeholder="DIGITE SEU RACIOCÍNIO AQUI (MIN. 10 CARACTERES)..."
                     className="w-full h-32 bg-[#050505] border-[2px] border-[var(--color-cyber-magenta)] text-[var(--color-cyber-magenta)] p-4 font-mono text-sm uppercase placeholder:text-[#440044] focus:outline-none focus:border-white focus:text-white transition-colors resize-none"
                   />
-
                   <button
                     onClick={handleSubmit}
                     disabled={reasoning.trim().length < 10 || isSubmitting}
@@ -418,6 +462,15 @@ function Dashboard() {
                   >
                     {isSubmitting ? "PROCESSANDO..." : "INJETAR_RESPOSTA"}
                   </button>
+                </div>
+              )}
+
+              {/* AVISO DO MODO LEITURA */}
+              {isReadOnly && (
+                <div className="mt-8 border-[2px] border-[#333] bg-black p-4 text-center animate-fade-in-up">
+                  <p className="font-mono text-gray-500 font-bold text-sm tracking-widest uppercase">
+                    [ MODO LEITURA: ESTE DESAFIO JÁ FOI ENCERRADO ]
+                  </p>
                 </div>
               )}
             </div>

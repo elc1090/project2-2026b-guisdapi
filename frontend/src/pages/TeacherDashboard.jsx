@@ -23,29 +23,70 @@ export default function TeacherDashboard() {
   const [cCorrectIndex, setCCorrectIndex] = useState(0); // índice da resposta certa (0 a 3)
   const [cDate, setCDate] = useState('');
 
-  // envia o novo desafio para o backend
-  const handleCreateChallenge = async (e) => {
+  // estados do modal de edicao de turma
+  const [isEditClassroomModalOpen, setIsEditClassroomModalOpen] = useState(false);
+  const [editClassroomName, setEditClassroomName] = useState('');
+
+  // estados do modal de edicao de desafio
+  const [isEditChallengeMode, setIsEditChallengeMode] = useState(false);
+
+  // abre o modal limpo para criacao
+  const openCreateChallengeModal = () => {
+    setCTitle('');
+    setCContent('');
+    setCOptions(['', '', '', '']);
+    setCCorrectIndex(0);
+    setCDate('');
+    setIsEditChallengeMode(false);
+    setIsChallengeModalOpen(true);
+  };
+
+  // abre o modal preenchido para edicao
+  const openEditChallengeModal = () => {
+    const desafioAtual = challenges.find(c => c.id === selectedChallengeId);
+    if (desafioAtual) {
+      setCTitle(desafioAtual.title);
+      setCContent(desafioAtual.content);
+      setCOptions(desafioAtual.options);
+      // descobre o index da alternativa correta para marcar o radio button
+      setCCorrectIndex(desafioAtual.options.indexOf(desafioAtual.correct_answer));
+      // formata a data para o padrao que o input type="date" exige (YYYY-MM-DD)
+      setCDate(desafioAtual.scheduled_date.split('T')[0]); 
+      
+      setIsEditChallengeMode(true);
+      setIsChallengeModalOpen(true);
+    }
+  };
+
+  // funcao hibrida: envia a criacao OU a edicao para o backend
+  const handleSubmitChallenge = async (e) => {
     e.preventDefault();
     if (!selectedClassroomId) {
       alert("Selecione uma turma primeiro!");
       return;
     }
-
+    
     try {
-      // monta o payload exatamente como o pydantic (backend) espera
       const payload = {
         title: cTitle,
         content: cContent,
         options: cOptions,
-        correct_answer: cOptions[cCorrectIndex], // injeta a string exata baseada no radio selecionado
+        correct_answer: cOptions[cCorrectIndex],
         scheduled_date: cDate
       };
 
-      const novoDesafio = await teacherService.createChallenge(selectedClassroomId, payload);
-
-      // atualização otimista: coloca o desafio novo no topo da lista
-      setChallenges([novoDesafio, ...challenges]);
-      setSelectedChallengeId(novoDesafio.id);
+      if (isEditChallengeMode) {
+        // MODO EDICAO
+        const updatedDesafio = await teacherService.updateChallenge(selectedChallengeId, payload);
+        // atualiza a lista mantendo a ordem atual
+        setChallenges(challenges.map(c => c.id === selectedChallengeId ? updatedDesafio : c));
+      } else {
+        // MODO CRIACAO
+        const novoDesafio = await teacherService.createChallenge(selectedClassroomId, payload);
+        // joga o novo desafio no topo da lista
+        setChallenges([novoDesafio, ...challenges]);
+        setSelectedChallengeId(novoDesafio.id);
+      }
 
       // fecha o modal e limpa os campos
       setIsChallengeModalOpen(false);
@@ -55,7 +96,34 @@ export default function TeacherDashboard() {
       setCCorrectIndex(0);
       setCDate('');
     } catch (error) {
-      alert("ERRO_ CRÍTICO: Não foi possível injetar o desafio. Verifique os dados.");
+      alert("ERRO_ CRÍTICO: Não foi possível processar o desafio. Verifique os dados.");
+    }
+  };
+
+  // deleta um desafio
+  const handleDeleteChallenge = async () => {
+    if (!selectedChallengeId) return;
+    
+    // barreira de seguranca ux
+    const confirm = window.confirm("ATENÇÃO: Deletar este desafio apagará TODAS as métricas e respostas dos alunos para esta questão específica. Continuar?");
+    
+    if (confirm) {
+      try {
+        await teacherService.deleteChallenge(selectedChallengeId);
+        
+        // retira o desafio deletado da tela
+        const novosDesafios = challenges.filter(c => c.id !== selectedChallengeId);
+        setChallenges(novosDesafios);
+        
+        if (novosDesafios.length > 0) {
+          setSelectedChallengeId(novosDesafios[0].id);
+        } else {
+          setSelectedChallengeId('');
+          setSubmissions([]); // limpa a tabela se nao sobrou nada
+        }
+      } catch (error) {
+        alert("ERRO_ CRÍTICO: Falha ao deletar o desafio.");
+      }
     }
   };
 
@@ -86,6 +154,65 @@ export default function TeacherDashboard() {
       setNewClassroomName('');
     } catch (error) {
       alert("ERRO_ CRÍTICO: Não foi possível criar a turma.");
+    }
+  };
+
+  // abre o modal de edicao ja com o nome atual preenchido
+  const openEditClassroomModal = () => {
+    const turmaAtual = classrooms.find(c => c.id === selectedClassroomId);
+    if (turmaAtual) {
+      setEditClassroomName(turmaAtual.name);
+      setIsEditClassroomModalOpen(true);
+    }
+  };
+
+  // envia a atualizacao da turma para a api
+  const handleEditClassroom = async (e) => {
+    e.preventDefault();
+    try {
+      const updatedClassroom = await teacherService.updateClassroom(selectedClassroomId, editClassroomName);
+      // atualiza o estado local para refletir a mudanca instantaneamente (otimista)
+      setClassrooms(classrooms.map(c => c.id === selectedClassroomId ? updatedClassroom : c));
+      setIsEditClassroomModalOpen(false);
+    } catch (error) {
+      alert("ERRO_ CRÍTICO: Não foi possível renomear a turma.");
+    }
+  };
+
+  // confirma e deleta a turma atual
+  const handleDeleteClassroom = async () => {
+    if (!selectedClassroomId) return;
+    
+    // barreira de seguranca ux
+    const confirm = window.confirm("ATENÇÃO: Deletar esta turma apagará DEFINITIVAMENTE todos os alunos, desafios e respostas vinculadas a ela. Continuar?");
+    
+    if (confirm) {
+      try {
+        await teacherService.deleteClassroom(selectedClassroomId);
+        // remove a turma da lista
+        const newClassrooms = classrooms.filter(c => c.id !== selectedClassroomId);
+        setClassrooms(newClassrooms);
+        
+        // reseta a selecao para a primeira turma da lista (se existir)
+        if (newClassrooms.length > 0) {
+          setSelectedClassroomId(newClassrooms[0].id);
+          const challengesData = await teacherService.getClassroomChallenges(newClassrooms[0].id);
+          setChallenges(challengesData);
+          if (challengesData.length > 0) {
+            setSelectedChallengeId(challengesData[0].id);
+          } else {
+            setSelectedChallengeId('');
+            setSubmissions([]);
+          }
+        } else {
+          setSelectedClassroomId('');
+          setChallenges([]);
+          setSelectedChallengeId('');
+          setSubmissions([]);
+        }
+      } catch (error) {
+        alert("ERRO_ CRÍTICO: Falha ao deletar o diretório da turma.");
+      }
     }
   };
 
@@ -246,6 +373,22 @@ export default function TeacherDashboard() {
                   ))
                 )}
               </select>
+
+              <button
+                onClick={openEditClassroomModal}
+                disabled={!selectedClassroomId}
+                className="bg-[var(--color-acid-green)] text-black font-mono font-bold px-4 py-2 hover:bg-transparent hover:text-[var(--color-acid-green)] hover:border-[var(--color-acid-green)] border-[2px] border-[var(--color-acid-green)] transition-colors disabled:opacity-50 shrink-0"
+              >
+                [ EDITAR ]
+              </button>
+              <button
+                onClick={handleDeleteClassroom}
+                disabled={!selectedClassroomId}
+                className="bg-[var(--color-cyber-magenta)] text-white font-mono font-bold px-4 py-2 hover:bg-transparent hover:text-[var(--color-cyber-magenta)] hover:border-[var(--color-cyber-magenta)] border-[2px] border-[var(--color-cyber-magenta)] transition-colors disabled:opacity-50 shrink-0"
+              >
+                [ DELETAR ]
+              </button>
+
             </div>
 
             {/* seletor de desafios */}
@@ -264,14 +407,31 @@ export default function TeacherDashboard() {
                   </option>
                 ))}
               </select>
-
-              <button
-                onClick={() => setIsChallengeModalOpen(true)}
-                disabled={!selectedClassroomId}
-                className="bg-[var(--color-cyber-cyan)] text-black font-mono font-bold px-4 py-2 hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-              >
-                + NOVO DESAFIO
-              </button>
+              
+              {/* === NOVOS BOTOES DE CONTROLE DO DESAFIO === */}
+              <div className="flex gap-2 w-full md:w-auto">
+                <button
+                  onClick={openEditChallengeModal}
+                  disabled={!selectedChallengeId}
+                  className="bg-[var(--color-acid-green)] text-black font-mono font-bold px-3 py-2 hover:bg-transparent hover:text-[var(--color-acid-green)] hover:border-[var(--color-acid-green)] border-[2px] border-[var(--color-acid-green)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  [ EDITAR ]
+                </button>
+                <button
+                  onClick={handleDeleteChallenge}
+                  disabled={!selectedChallengeId}
+                  className="bg-[var(--color-cyber-magenta)] text-white font-mono font-bold px-3 py-2 hover:bg-transparent hover:text-[var(--color-cyber-magenta)] hover:border-[var(--color-cyber-magenta)] border-[2px] border-[var(--color-cyber-magenta)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  [ DELETAR ]
+                </button>
+                <button
+                  onClick={openCreateChallengeModal}
+                  disabled={!selectedClassroomId}
+                  className="bg-[var(--color-cyber-cyan)] text-black font-mono font-bold px-4 py-2 hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  + NOVO DESAFIO
+                </button>
+              </div>
             </div>
 
             {/* métricas / dashboard rápido */}
@@ -400,22 +560,22 @@ export default function TeacherDashboard() {
         </div>
       )}
 
+      {/* modal de criar/editar desafio */}
       {isChallengeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-black border-[4px] border-[var(--color-cyber-cyan)] shadow-[8px_8px_0px_0px_var(--color-cyber-cyan)] p-6 md:p-8 max-w-2xl w-full relative animate-fade-in-up my-8">
-
             <button
               onClick={() => setIsChallengeModalOpen(false)}
               className="absolute top-4 right-4 text-[var(--color-cyber-cyan)] font-mono font-bold text-xl hover:text-white"
             >
               [X]
             </button>
-
+            
             <h2 className="font-display text-2xl font-black uppercase text-white mb-6 text-[var(--color-cyber-cyan)]">
-              COMPILAR_NOVO_DESAFIO
+              {isEditChallengeMode ? 'EDITAR_DESAFIO' : 'COMPILAR_NOVO_DESAFIO'}
             </h2>
-
-            <form onSubmit={handleCreateChallenge} className="flex flex-col gap-4">
+            
+            <form onSubmit={handleSubmitChallenge} className="flex flex-col gap-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <label className="font-mono font-bold text-xs text-[var(--color-cyber-cyan)]">TÍTULO</label>
@@ -426,12 +586,10 @@ export default function TeacherDashboard() {
                   <input type="date" value={cDate} onChange={e => setCDate(e.target.value)} required className="bg-transparent border-[2px] border-[#333] text-white p-2 font-mono text-sm focus:border-[var(--color-cyber-cyan)] outline-none custom-calendar-icon" />
                 </div>
               </div>
-
               <div className="flex flex-col gap-2">
                 <label className="font-mono font-bold text-xs text-[var(--color-cyber-cyan)]">CORPO DO DESAFIO (TEXTO/MARKDOWN)</label>
                 <textarea value={cContent} onChange={e => setCContent(e.target.value)} required minLength={10} className="bg-[#050505] border-[2px] border-[#333] text-white p-2 font-mono text-sm focus:border-[var(--color-cyber-cyan)] outline-none h-24 resize-none" />
               </div>
-
               <div className="mt-4 mb-2 border-l-[4px] border-[var(--color-cyber-cyan)] pl-4">
                 <p className="font-mono font-bold text-xs text-[var(--color-cyber-cyan)] mb-4">DEFINA AS ALTERNATIVAS E MARQUE A RESPOSTA CORRETA:</p>
                 <div className="flex flex-col gap-3">
@@ -457,9 +615,46 @@ export default function TeacherDashboard() {
                   ))}
                 </div>
               </div>
-
+              
               <button type="submit" className="mt-4 bg-[var(--color-cyber-cyan)] text-black border-[3px] border-[var(--color-cyber-cyan)] py-3 font-display font-black text-xl uppercase tracking-widest hover:bg-white hover:border-white transition-all">
-                DEPLOY_DESAFIO
+                {isEditChallengeMode ? 'ATUALIZAR_DESAFIO' : 'DEPLOY_DESAFIO'}
+              </button>
+              
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* modal de edicao de turma */}
+      {isEditClassroomModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-black border-[4px] border-[var(--color-acid-green)] shadow-[8px_8px_0px_0px_var(--color-acid-green)] p-8 max-w-md w-full relative animate-fade-in-up">
+            <button
+              onClick={() => setIsEditClassroomModalOpen(false)}
+              className="absolute top-4 right-4 text-[var(--color-acid-green)] font-mono font-bold text-xl hover:text-white"
+            >
+              [X]
+            </button>
+            <h2 className="font-display text-2xl font-black uppercase text-white mb-6">
+              RENOMEAR_INSTÂNCIA
+            </h2>
+            <form onSubmit={handleEditClassroom} className="flex flex-col gap-4">
+              <label className="font-mono font-bold text-xs tracking-widest text-[var(--color-acid-green)] uppercase">
+                &gt; NOVO NOME DA TURMA
+              </label>
+              <input
+                type="text"
+                value={editClassroomName}
+                onChange={(e) => setEditClassroomName(e.target.value)}
+                required
+                minLength={3}
+                className="bg-transparent border-[3px] border-[var(--color-acid-green)] text-white p-3 font-mono text-sm focus:outline-none focus:bg-[#002200] transition-colors"
+              />
+              <button
+                type="submit"
+                className="mt-4 bg-[var(--color-acid-green)] text-black border-[3px] border-[var(--color-acid-green)] py-3 font-display font-black text-xl uppercase tracking-widest hover:bg-[var(--color-cyber-cyan)] hover:border-[var(--color-cyber-cyan)] transition-all"
+              >
+                ATUALIZAR_DIRETÓRIO
               </button>
             </form>
           </div>

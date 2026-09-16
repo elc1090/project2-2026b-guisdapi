@@ -22,5 +22,16 @@ export const challengesService = {
       console.error("erro ao enviar resposta:", error);
       throw error;
     }
-  }
+  },
+
+  getChallengeById: async (challengeId) => {
+    try {
+      const response = await api.get(`/challenges/${challengeId}/student`);
+      return response.data;
+    } catch (error) {
+      console.error("erro ao buscar desafio especifico:", error);
+      throw error;
+    }
+  },
+
 };

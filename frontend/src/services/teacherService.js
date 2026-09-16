@@ -55,5 +55,49 @@ export const teacherService = {
       console.error("Erro ao buscar submissões:", error);
       throw error;
     }
-  }
+  },
+
+  // edita o nome de uma turma existente
+  updateClassroom: async (classroomId, newName) => {
+    try {
+      const response = await api.put(`/classrooms/${classroomId}`, { name: newName });
+      return response.data;
+    } catch (error) {
+      console.error("erro ao atualizar turma:", error);
+      throw error;
+    }
+  },
+
+  // exclui a turma e todas as dependencias (cascade)
+  deleteClassroom: async (classroomId) => {
+    try {
+      const response = await api.delete(`/classrooms/${classroomId}`);
+      return response.data;
+    } catch (error) {
+      console.error("erro ao deletar turma:", error);
+      throw error;
+    }
+  },
+
+  // edita um desafio existente
+  updateChallenge: async (challengeId, challengeData) => {
+    try {
+      const response = await api.put(`/challenges/${challengeId}`, challengeData);
+      return response.data;
+    } catch (error) {
+      console.error("Erro ao atualizar desafio:", error);
+      throw error;
+    }
+  },
+
+  // deleta um desafio e as respostas vinculadas
+  deleteChallenge: async (challengeId) => {
+    try {
+      const response = await api.delete(`/challenges/${challengeId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Erro ao deletar desafio:", error);
+      throw error;
+    }
+  },
 };

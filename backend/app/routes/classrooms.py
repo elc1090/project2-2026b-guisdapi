@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, status
-from app.models.classroom import ClassroomCreate, ClassroomResponse
+from fastapi import APIRouter, Depends, status, HTTPException
+from app.models.classroom import ClassroomCreate, ClassroomResponse, ClassroomUpdate
 from app.core.database import get_database
 from app.core.dependencies import get_current_teacher_id
 import random
 import string
+from bson import ObjectId
 
 router = APIRouter(prefix="/classrooms", tags=["Turmas"])
 
@@ -57,3 +58,78 @@ async def get_teacher_classrooms(
         classroom["id"] = str(classroom["_id"])
         
     return classrooms_list
+
+
+@router.put("/{classroom_id}", response_model=ClassroomResponse)
+async def update_classroom(
+    classroom_id: str,
+    classroom_update: ClassroomUpdate,
+    teacher_id: str = Depends(get_current_teacher_id)
+):
+    """
+    endpoint para o professor editar o nome de uma turma existente.
+    """
+    db = get_database()
+    
+    # valida a string do objectid
+    try:
+        obj_id = ObjectId(classroom_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="id da turma invalido")
+
+    # atualiza a turma garantindo que ela pertence ao professor logado
+    result = await db["classrooms"].update_one(
+        {"_id": obj_id, "teacher_id": teacher_id},
+        {"$set": {"name": classroom_update.name}}
+    )
+
+    # verifica se encontrou e atualizou a turma
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="turma nao encontrada ou sem permissao")
+
+    # busca a turma atualizada para retornar ao frontend
+    updated_classroom = await db["classrooms"].find_one({"_id": obj_id})
+    updated_classroom["id"] = str(updated_classroom["_id"])
+    
+    return updated_classroom
+
+
+@router.delete("/{classroom_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_classroom(
+    classroom_id: str,
+    teacher_id: str = Depends(get_current_teacher_id)
+):
+    """
+    endpoint para o professor deletar uma turma e todas as dependencias (cascade delete manual).
+    """
+    db = get_database()
+    
+    # valida a string do objectid
+    try:
+        obj_id = ObjectId(classroom_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="id da turma invalido")
+
+    # verifica se a turma existe e pertence ao professor
+    classroom = await db["classrooms"].find_one({"_id": obj_id, "teacher_id": teacher_id})
+    if not classroom:
+        raise HTTPException(status_code=404, detail="turma nao encontrada ou sem permissao")
+
+    # deleta todas as submissoes vinculadas a esta turma
+    await db["submissions"].delete_many({"classroom_id": classroom_id})
+    
+    # deleta todos os historicos de visualizacao de desafios vinculados aos alunos desta turma
+    # (como nao salvamos o classroom_id nas views, deletamos filtrando os desafios primeiro)
+    desafios = await db["challenges"].find({"classroom_id": classroom_id}).to_list(length=None)
+    desafios_ids = [str(d["_id"]) for d in desafios]
+    if desafios_ids:
+        await db["challenge_views"].delete_many({"challenge_id": {"$in": desafios_ids}})
+
+    # deleta todos os desafios da turma
+    await db["challenges"].delete_many({"classroom_id": classroom_id})
+    
+    # deleta todos os alunos da turma
+    await db["students"].delete_many({"classroom_id": classroom_id})
+    
+    # por fim, deleta a propria turma
+    await db["classrooms"].delete_one({"_id": obj_id})

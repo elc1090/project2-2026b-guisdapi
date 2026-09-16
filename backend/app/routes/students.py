@@ -4,6 +4,7 @@ from app.core.database import get_database
 from app.core.security import get_password_hash
 from app.core.dependencies import get_current_student_data
 from bson import ObjectId
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/students", tags=["Alunos"])
 
@@ -78,6 +79,23 @@ async def get_my_timeline(student_data: dict = Depends(get_current_student_data)
     
     # busca os dados do aluno 
     student = await db["students"].find_one({"_id": ObjectId(student_data["student_id"])})
+
+    # --- AUTO-HEALING DO STREAK ---
+    streak_atual = student.get("streak", 0)
+    ultima_sub = student.get("last_submission_date")
+    
+    if ultima_sub and streak_atual > 0:
+        hoje_br = (datetime.now(timezone.utc) - timedelta(hours=3)).date()
+        data_ultima = ultima_sub.replace(tzinfo=timezone.utc).date()
+        
+        # Se passou mais de 1 dia desde a última submissão, quebra o streak silenciosamente
+        if (hoje_br - data_ultima).days > 1:
+            streak_atual = 0
+            await db["students"].update_one(
+                {"_id": ObjectId(student_data["student_id"])},
+                {"$set": {"streak": 0}}
+            )
+            student["streak"] = 0 # Atualiza na memoria para devolver ao frontend
     
     # busca todos os desafios da turma 
     cursor_challenges = db["challenges"].find({"classroom_id": student_data["classroom_id"]})

@@ -4,7 +4,7 @@ from app.core.database import get_database
 from app.core.dependencies import get_current_teacher_id, get_current_student_data
 from app.models.submission import SubmissionTeacherResponse
 from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/challenges", tags=["Desafios"])
 
@@ -59,8 +59,9 @@ async def create_challenge(
 @router.get("/today", response_model=ChallengeStudentResponse)
 async def get_today_challenge(student_data: dict = Depends(get_current_student_data)):
     db = get_database()
-    
-    hoje = datetime.now(timezone.utc).date()
+
+    # calcula a data de hoje (ajustada para o fuso horario do Brasil)
+    hoje = (datetime.now(timezone.utc) - timedelta(hours=3)).date()
     today = datetime.combine(hoje, datetime.min.time())
 
     challenge = await db["challenges"].find_one({
@@ -175,3 +176,124 @@ async def get_classroom_challenges(
         challenge["id"] = str(challenge["_id"])
 
     return challenges_list
+
+@router.put("/{challenge_id}", response_model=ChallengeResponse)
+async def update_challenge(
+    challenge_id: str,
+    challenge_update: ChallengeCreate, # reaproveitamos o esquema de criacao
+    teacher_id: str = Depends(get_current_teacher_id)
+):
+    """
+    endpoint para o professor editar um desafio ja criado.
+    """
+    db = get_database()
+    
+    try:
+        obj_challenge_id = ObjectId(challenge_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="id do desafio invalido")
+
+    # 1. busca o desafio atual
+    challenge = await db["challenges"].find_one({"_id": obj_challenge_id})
+    if not challenge:
+        raise HTTPException(status_code=404, detail="desafio nao encontrado")
+
+    # 2. seguranca: verifica se a turma do desafio pertence ao professor logado
+    classroom = await db["classrooms"].find_one({
+        "_id": ObjectId(challenge["classroom_id"]),
+        "teacher_id": teacher_id
+    })
+    
+    if not classroom:
+        raise HTTPException(status_code=403, detail="voce nao tem permissao para editar este desafio")
+
+    # 3. prepara os novos dados
+    update_data = challenge_update.model_dump()
+    # converte o date para datetime (meia-noite) como exige o mongodb
+    update_data["scheduled_date"] = datetime.combine(challenge_update.scheduled_date, datetime.min.time())
+    
+    # 4. executa a atualizacao
+    await db["challenges"].update_one(
+        {"_id": obj_challenge_id},
+        {"$set": update_data}
+    )
+
+    # 5. retorna o desafio atualizado
+    updated_challenge = await db["challenges"].find_one({"_id": obj_challenge_id})
+    updated_challenge["id"] = str(updated_challenge["_id"])
+    return updated_challenge
+
+
+@router.delete("/{challenge_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_challenge(
+    challenge_id: str,
+    teacher_id: str = Depends(get_current_teacher_id)
+):
+    """
+    endpoint para o professor deletar um desafio e limpar as submissoes atreladas a ele.
+    """
+    db = get_database()
+    
+    try:
+        obj_challenge_id = ObjectId(challenge_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="id do desafio invalido")
+
+    # 1. busca o desafio
+    challenge = await db["challenges"].find_one({"_id": obj_challenge_id})
+    if not challenge:
+        raise HTTPException(status_code=404, detail="desafio nao encontrado")
+
+    # 2. seguranca: o professor e dono da turma dona do desafio?
+    classroom = await db["classrooms"].find_one({
+        "_id": ObjectId(challenge["classroom_id"]),
+        "teacher_id": teacher_id
+    })
+    
+    if not classroom:
+        raise HTTPException(status_code=403, detail="voce nao tem permissao para deletar este desafio")
+
+    # 3. cascade delete: remove as submissoes deste desafio especifico
+    await db["submissions"].delete_many({"challenge_id": challenge_id})
+    
+    # 4. cascade delete: remove os registros de visualizacao (para o gamification nao bugar)
+    await db["challenge_views"].delete_many({"challenge_id": challenge_id})
+
+    # 5. por fim, apaga o desafio
+    await db["challenges"].delete_one({"_id": obj_challenge_id})
+
+@router.get("/{challenge_id}/student", response_model=ChallengeStudentResponse)
+async def get_specific_challenge_for_student(
+    challenge_id: str,
+    student_data: dict = Depends(get_current_student_data)
+):
+    """
+    endpoint para o aluno consultar um desafio especifico do passado.
+    retorna o modelo seguro que oculta a resposta correta.
+    """
+    db = get_database()
+    
+    try:
+        obj_challenge_id = ObjectId(challenge_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="id do desafio invalido")
+
+    # busca o desafio garantindo que ele pertence a turma do aluno
+    challenge = await db["challenges"].find_one({
+        "_id": obj_challenge_id,
+        "classroom_id": student_data["classroom_id"]
+    })
+    
+    if not challenge:
+        raise HTTPException(status_code=404, detail="desafio nao encontrado")
+
+    # verifica se o desafio esta no futuro (bloqueia o acesso caso o aluno tente hackear a api)
+    hoje = datetime.now(timezone.utc).date()
+    data_desafio = challenge["scheduled_date"].date()
+    
+    if data_desafio > hoje:
+        raise HTTPException(status_code=403, detail="este desafio ainda nao esta disponivel")
+
+    # converte o id para string para o pydantic validar
+    challenge["id"] = str(challenge["_id"])
+    return challenge

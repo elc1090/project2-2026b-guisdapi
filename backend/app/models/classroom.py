@@ -12,5 +12,9 @@ class ClassroomResponse(BaseModel):
     invite_code: str
     is_open_for_enrollment: bool
 
+# define o esquema de entrada para edicao da turma
+class ClassroomUpdate(BaseModel):
+    name: str = Field(..., min_length=3, description="novo nome da turma")
+
     class Config:
         populate_by_name = True
