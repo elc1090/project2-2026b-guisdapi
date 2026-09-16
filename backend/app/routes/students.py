@@ -3,6 +3,7 @@ from app.models.student import StudentCreate, StudentResponse, StudentRankingRes
 from app.core.database import get_database
 from app.core.security import get_password_hash
 from app.core.dependencies import get_current_student_data
+from bson import ObjectId
 
 router = APIRouter(prefix="/students", tags=["Alunos"])
 
@@ -67,3 +68,40 @@ async def get_classroom_ranking(student_data: dict = Depends(get_current_student
     ranking = await cursor.to_list(length=10)
     
     return ranking
+
+@router.get("/me/timeline")
+async def get_my_timeline(student_data: dict = Depends(get_current_student_data)):
+    """
+    endpoint BFF para montar a linha do tempo exata do aluno cruzando desafios vs submissões.
+    """
+    db = get_database()
+    
+    # busca os dados do aluno 
+    student = await db["students"].find_one({"_id": ObjectId(student_data["student_id"])})
+    
+    # busca todos os desafios da turma 
+    cursor_challenges = db["challenges"].find({"classroom_id": student_data["classroom_id"]})
+    challenges = await cursor_challenges.to_list(length=100)
+    
+    # busca todas as submissões deste aluno
+    cursor_subs = db["submissions"].find({"student_id": student_data["student_id"]})
+    submissions = await cursor_subs.to_list(length=100)
+    
+    # truque de performance: cria um dicionário/mapa O(1) das submissões pelo ID do desafio
+    sub_map = {str(sub["challenge_id"]): sub for sub in submissions}
+    
+    history = []
+    for ch in challenges:
+        ch_id = str(ch["_id"])
+        sub = sub_map.get(ch_id)
+        history.append({
+            "challenge_id": ch_id,
+            "date": ch["scheduled_date"].strftime("%Y-%m-%d"), # Formata para a string de calendário
+            "has_submitted": bool(sub),
+            "is_correct": sub["is_correct"] if sub else False
+        })
+        
+    return {
+        "streak": student.get("streak", 0),
+        "history": history
+    }

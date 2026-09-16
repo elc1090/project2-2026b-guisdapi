@@ -1,52 +1,65 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { challengesService } from '../services/challengesService';
 import { studentService } from '../services/studentService';
 
-const ITEM_WIDTH = 48; 
-const ITEM_GAP = 12; 
+const ITEM_WIDTH = 48;
+const ITEM_GAP = 12;
 const ITEM_SLOT = ITEM_WIDTH + ITEM_GAP;
 const MAX_VISIBLE = 10;
 const MIN_VISIBLE = 4;
 
 function Dashboard() {
   const navigate = useNavigate();
-  
-  // Estados de busca do banco de dados
+
+  // estados de busca do banco de dados
   const [challenge, setChallenge] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Estados da interação do aluno
+  // estados da interação do aluno
   const [selectedOption, setSelectedOption] = useState(null);
   const [reasoning, setReasoning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Estados da submissão gamificada
+
+  // estados da submissão gamificada
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
 
-  // Estados do carrossel/calendário
+  // estados do carrossel/calendário
   const currentDate = new Date();
   const todayDay = currentDate.getDate();
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  const wrapperRef = useRef(null); 
-  const sliderRef = useRef(null); 
+  const wrapperRef = useRef(null);
+  const sliderRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [visibleCount, setVisibleCount] = useState(MAX_VISIBLE);
 
-  // Estados do Modal de Ranking
+  // estados do modal de ranking
   const [isRankingOpen, setIsRankingOpen] = useState(false);
   const [rankingData, setRankingData] = useState([]);
   const [loadingRanking, setLoadingRanking] = useState(false);
 
-  // Função para buscar os dados e abrir o modal
+  // === estados da timeline ===
+  const [timelineData, setTimelineData] = useState(null);
+
+  // mapeia o histórico para acesso O(1) pela data (ex: '2026-09-12' -> {...dados})
+  const historyMap = useMemo(() => {
+    if (!timelineData?.history) return {};
+    const map = {};
+    timelineData.history.forEach(item => {
+      map[item.date] = item;
+    });
+    return map;
+  }, [timelineData]);
+
+  // busca os dados e abre o modal de ranking
   const handleOpenRanking = async () => {
     setLoadingRanking(true);
-    setIsRankingOpen(true); // Abre a janela na hora para mostrar o "loading"
+    setIsRankingOpen(true); // abre a janela na hora para mostrar o "loading"
     try {
       const data = await studentService.getRanking();
       setRankingData(data);
@@ -72,44 +85,49 @@ function Dashboard() {
 
   useEffect(() => {
     if (sliderRef.current) {
-      const todayIndex = todayDay - 1; 
+      const todayIndex = todayDay - 1;
       sliderRef.current.scrollLeft = todayIndex * ITEM_SLOT;
     }
   }, [visibleCount, todayDay]);
 
-  // Busca o desafio ao carregar a página
+  // busca o desafio e a timeline ao carregar a página
   useEffect(() => {
-    const fetchChallenge = async () => {
+    const fetchInitialData = async () => {
       try {
         const token = localStorage.getItem('@DesafioDoDia:token');
         if (!token) {
           navigate('/login');
           return;
         }
-        
-        const data = await challengesService.getTodayChallenge();
-        setChallenge(data);
+
+        // disparamos as duas chamadas ao mesmo tempo para ganhar performance
+        const [todayData, timelineResponse] = await Promise.all([
+          challengesService.getTodayChallenge().catch(() => null), // catch interno pra não quebrar a tela se não tiver desafio hoje
+          studentService.getTimeline()
+        ]);
+
+        if (todayData) setChallenge(todayData);
+        setTimelineData(timelineResponse);
       } catch (error) {
-        console.error("Erro ao buscar desafio:", error);
+        console.error("erro ao sincronizar dashboard:", error);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchChallenge();
+    fetchInitialData();
   }, [navigate]);
 
-  // Função disparada ao clicar em INJETAR_RESPOSTA
+  // função disparada ao clicar em injetar_resposta
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Pega o texto exato da alternativa escolhida
+      // pega o texto exato da alternativa escolhida
       const optionText = challenge.options[selectedOption];
-      
-      // Envia para o backend
+
+      // envia para o backend
       const result = await challengesService.submitAnswer(challenge.id, optionText, reasoning);
-      
-      // Guarda a pontuação e aciona a tela de sucesso
+
+      // guarda a pontuação e aciona a tela de sucesso
       setSubmissionResult(result);
       setHasSubmitted(true);
     } catch (error) {
@@ -120,7 +138,7 @@ function Dashboard() {
     }
   };
 
-  // Funções de arrastar o mouse do calendário
+  // funções de arrastar o mouse do calendário
   const handleMouseDown = (e) => {
     setIsDragging(true);
     setStartX(e.pageX - sliderRef.current.offsetLeft);
@@ -132,7 +150,7 @@ function Dashboard() {
     if (!isDragging) return;
     e.preventDefault();
     const x = e.pageX - sliderRef.current.offsetLeft;
-    const walk = (x - startX) * 2; 
+    const walk = (x - startX) * 2;
     sliderRef.current.scrollLeft = scrollLeft - walk;
   };
 
@@ -140,7 +158,7 @@ function Dashboard() {
   const sidePadding = Math.max(0, trackWidth / 2 - ITEM_WIDTH / 2);
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-[var(--color-cyber-dark)] py-8 md:py-12 font-sans text-white overflow-x-hidden relative"
       style={{
         backgroundImage: 'radial-gradient(rgba(0, 255, 102, 0.15) 2px, transparent 2px)',
@@ -167,10 +185,10 @@ function Dashboard() {
             <div className="bg-current text-black h-5 w-5 flex items-center justify-center text-[10px]">👤</div>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4 font-mono font-bold text-xs tracking-widest uppercase flex-wrap justify-end">
-          {/* BOTÃO DO RANKING */}
-          <button 
+          {/* botão do ranking */}
+          <button
             onClick={handleOpenRanking}
             className="flex items-center h-10 border-[3px] border-yellow-400 bg-yellow-400 text-black px-4 hover:bg-transparent hover:text-yellow-400 transition-colors shadow-[4px_4px_0px_0px_rgba(250,204,21,0.5)]"
           >
@@ -180,15 +198,14 @@ function Dashboard() {
           <div className="flex items-center h-10 border-[3px] border-[var(--color-acid-green)] bg-black text-[var(--color-acid-green)] px-4 hidden md:flex">
             [ TURMA: ATIVA ]
           </div>
-          
-          <div 
+
+          <div
             onClick={() => { localStorage.removeItem('@DesafioDoDia:token'); navigate('/login'); }}
             className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors"
           >
             <span>&gt; SAIR</span>
           </div>
         </div>
-
       </header>
 
       <div ref={wrapperRef} className="relative z-10 w-full flex justify-center mb-12 px-8">
@@ -208,20 +225,31 @@ function Dashboard() {
           className={`flex items-start overflow-x-auto pb-6 pt-4 gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         >
           {days.map((day) => {
+            // formata a data atual do loop no padrão 'YYYY-MM-DD'
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(day).padStart(2, '0');
+            const dateKey = `${year}-${month}-${dayStr}`;
+
+            // busca se havia algum desafio neste dia
+            const dayData = historyMap[dateKey];
+
             const isToday = day === todayDay;
             const isPast = day < todayDay;
-            const isFuture = day > todayDay;
-            const isStreak = day === todayDay - 1 || day === todayDay - 2;
 
             let circleClasses = "flex items-center justify-center w-12 h-12 font-mono font-bold text-sm shrink-0 relative transition-all select-none ";
 
-            if (isStreak) {
+            if (dayData?.has_submitted) {
+              // 1. o aluno fez o desafio deste dia -> streak garantido (verde neon)
               circleClasses += "bg-[var(--color-acid-green)] text-black border-[3px] border-[var(--color-acid-green)] shadow-[4px_4px_0px_0px_var(--color-acid-green)] -rotate-3";
-            } else if (isToday) {
-              circleClasses += "bg-[var(--color-cyber-magenta)] text-white border-[3px] border-white shadow-[4px_4px_0px_0px_white] scale-110 rotate-3";
-            } else if (isFuture) {
-              circleClasses += "bg-transparent border-[2px] border-dashed border-[#004411] text-[#006622]";
-            } else if (isPast) {
+            } else if (isToday && dayData) {
+              // 2. tem desafio hoje e ele ainda não fez -> chamada para ação (magenta)
+              circleClasses += "bg-[var(--color-cyber-magenta)] text-white border-[3px] border-white shadow-[4px_4px_0px_0px_white] scale-110 rotate-3 animate-pulse";
+            } else if (dayData && !dayData.has_submitted && isPast) {
+              // 3. tinha desafio, mas já passou e ele perdeu -> triste (vermelho/preto)
+              circleClasses += "bg-black text-[var(--color-cyber-magenta)] border-[3px] border-[var(--color-cyber-magenta)] opacity-70 grayscale";
+            } else {
+              // 4. dia normal, sem desafio cadastrado no sistema (invisível)
               circleClasses += "bg-transparent border-[2px] border-[#004411] text-[#004411]";
             }
 
@@ -229,7 +257,8 @@ function Dashboard() {
               <div key={day} id={isToday ? 'day-today' : `day-${day}`} className="flex flex-col items-center shrink-0">
                 <div className={circleClasses}>
                   {day}
-                  {isStreak && <span className="absolute -bottom-3 -right-3 text-lg drop-shadow-md pointer-events-none">🔥</span>}
+                  {/* se o aluno concluiu, bota o foguinho da ofensiva */}
+                  {dayData?.has_submitted && <span className="absolute -bottom-3 -right-3 text-lg drop-shadow-md pointer-events-none">🔥</span>}
                 </div>
                 {isToday && <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-white mt-3"></div>}
               </div>
@@ -239,7 +268,7 @@ function Dashboard() {
       </div>
 
       <main className="relative z-10 max-w-4xl mx-auto px-6 md:px-12 mb-20">
-        
+
         {loading ? (
           <div className="bg-black border-[4px] border-[var(--color-acid-green)] shadow-[8px_8px_0px_0px_var(--color-acid-green)] p-12 text-center">
             <h2 className="font-mono text-[var(--color-acid-green)] text-xl animate-pulse tracking-widest uppercase">
@@ -256,25 +285,25 @@ function Dashboard() {
             </p>
           </div>
         ) : hasSubmitted && submissionResult ? (
-          
-          /* TELA DE RESULTADOS GAMIFICADA */
+
+          /* tela de resultados gamificada */
           <div className={`border-[4px] shadow-[8px_8px_0px_0px] p-12 text-center flex flex-col items-center animate-fade-in-up ${
-            submissionResult.is_correct 
-              ? 'bg-black border-[var(--color-acid-green)] shadow-[var(--color-acid-green)]' 
+            submissionResult.is_correct
+              ? 'bg-black border-[var(--color-acid-green)] shadow-[var(--color-acid-green)]'
               : 'bg-black border-[var(--color-cyber-magenta)] shadow-[var(--color-cyber-magenta)]'
           }`}>
             <div className={`text-6xl mb-6 ${submissionResult.is_correct ? 'text-[var(--color-acid-green)]' : 'text-[var(--color-cyber-magenta)]'}`}>
               {submissionResult.is_correct ? '✔️' : '❌'}
             </div>
-            
+
             <h2 className={`font-display text-3xl md:text-5xl font-black uppercase tracking-tighter ${
               submissionResult.is_correct ? 'text-[var(--color-acid-green)]' : 'text-[var(--color-cyber-magenta)]'
             }`}>
               {submissionResult.is_correct ? 'ACESSO_CONCEDIDO' : 'FALHA_CRÍTICA'}
             </h2>
-            
+
             <div className={`w-16 h-[4px] my-6 ${submissionResult.is_correct ? 'bg-[var(--color-acid-green)]' : 'bg-[var(--color-cyber-magenta)]'}`}></div>
-            
+
             {!submissionResult.is_correct && (
               <p className="font-mono text-white mt-2 uppercase tracking-widest leading-relaxed">
                 A RESPOSTA CORRETA ERA:<br/>
@@ -292,17 +321,17 @@ function Dashboard() {
                 <span className="text-orange-500">{submissionResult.streak_updated} 🔥</span>
               </div>
             </div>
-            
+
             <p className="font-mono text-gray-500 text-xs mt-8 uppercase tracking-widest">
               [ STATUS: RESPOSTA REGISTRADA. AGUARDE O PRÓXIMO CICLO. ]
             </p>
           </div>
 
         ) : (
-          
-          /* CARTÃO DO DESAFIO DO DIA */
+
+          /* cartão do desafio do dia */
           <div className="bg-black border-[4px] border-[var(--color-acid-green)] shadow-[8px_8px_0px_0px_var(--color-acid-green)] overflow-hidden flex flex-col">
-            
+
             <div className="bg-[var(--color-acid-green)] border-b-[4px] border-[var(--color-acid-green)] px-4 py-2 flex justify-between items-center">
               <div className="flex gap-2">
                 <div className="w-4 h-4 bg-black border-2 border-black"></div>
@@ -335,19 +364,19 @@ function Dashboard() {
               <p className="font-mono text-[var(--color-acid-green)] font-bold text-sm tracking-widest mb-6 uppercase">
                 &gt; ESCOLHA A RESPOSTA CORRETA:
               </p>
-              
+
               <div className="flex flex-col gap-4 font-sans">
                 {challenge.options.map((optionText, index) => {
                   const letra = String.fromCharCode(65 + index);
                   const isSelected = selectedOption === index;
-                  
+
                   return (
-                    <button 
-                      key={index} 
+                    <button
+                      key={index}
                       onClick={() => setSelectedOption(index)}
                       className={`flex items-center w-full text-left border-[3px] p-3 md:p-4 transition-all group ${
-                        isSelected 
-                          ? 'bg-[#001100] border-[var(--color-acid-green)] text-white shadow-[4px_4px_0px_0px_var(--color-acid-green)] translate-y-[-2px] translate-x-[-2px]' 
+                        isSelected
+                          ? 'bg-[#001100] border-[var(--color-acid-green)] text-white shadow-[4px_4px_0px_0px_var(--color-acid-green)] translate-y-[-2px] translate-x-[-2px]'
                           : 'bg-black border-[#333] text-gray-400 hover:border-[var(--color-cyber-magenta)] hover:text-white'
                       }`}
                     >
@@ -362,7 +391,7 @@ function Dashboard() {
                 })}
               </div>
 
-              {/* Área da Justificativa e Envio */}
+              {/* área da justificativa e envio */}
               {selectedOption !== null && (
                 <div className="mt-8 animate-fade-in-up">
                   <p className="font-mono text-[var(--color-cyber-magenta)] font-bold text-sm tracking-widest mb-4 uppercase">
@@ -374,8 +403,8 @@ function Dashboard() {
                     placeholder="DIGITE SEU RACIOCÍNIO AQUI (MIN. 10 CARACTERES)..."
                     className="w-full h-32 bg-[#050505] border-[2px] border-[var(--color-cyber-magenta)] text-[var(--color-cyber-magenta)] p-4 font-mono text-sm uppercase placeholder:text-[#440044] focus:outline-none focus:border-white focus:text-white transition-colors resize-none"
                   />
-                  
-                  <button 
+
+                  <button
                     onClick={handleSubmit}
                     disabled={reasoning.trim().length < 10 || isSubmitting}
                     className="mt-6 w-full bg-[var(--color-cyber-magenta)] text-white font-display font-black text-2xl uppercase py-4 border-[3px] border-[var(--color-cyber-magenta)] hover:bg-black hover:text-[var(--color-cyber-magenta)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -389,12 +418,12 @@ function Dashboard() {
         )}
       </main>
 
-      {/* MODAL DE RANKING */}
+      {/* modal de ranking */}
       {isRankingOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-black border-[4px] border-yellow-400 shadow-[8px_8px_0px_0px_yellow-400] p-6 md:p-8 max-w-md w-full relative animate-fade-in-up">
-            
-            <button 
+
+            <button
               onClick={() => setIsRankingOpen(false)}
               className="absolute top-4 right-4 text-yellow-400 font-mono font-bold text-xl hover:text-white"
             >

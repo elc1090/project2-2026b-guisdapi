@@ -10,5 +10,15 @@ export const studentService = {
       console.error("Erro ao buscar ranking:", error);
       throw error;
     }
+  },
+
+    getTimeline: async () => {
+    try {
+      const response = await api.get('/students/me/timeline');
+      return response.data;
+    } catch (error) {
+      console.error("Erro ao buscar timeline:", error);
+      throw error;
+    }
   }
 };
