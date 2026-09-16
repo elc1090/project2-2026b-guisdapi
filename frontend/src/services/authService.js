@@ -1,38 +1,54 @@
 import { api } from './api';
 
 export const authService = {
-  // login do aluno: FastAPI espera um JSON com 'matricula' e 'pin'
+  // === LOGIN ===
   studentLogin: async (enrollment, pin) => {
     try {
-      const response = await api.post('/auth/student-login', {
-        matricula: enrollment, // nome exato que o backend Python espera
-        pin: pin               // nome exato que o backend Python espera
+      const response = await api.post('/auth/student-login', { matricula: enrollment, pin: pin });
+      return response.data;
+    } catch (error) { throw error; }
+  },
+
+  teacherLogin: async (email, password) => {
+    try {
+      const params = new URLSearchParams();
+      params.append('username', email);
+      params.append('password', password);
+      const response = await api.post('/auth/login', params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      return response.data;
+    } catch (error) { throw error; }
+  },
+
+  // === CADASTRO ===
+  registerStudent: async (name, enrollment, classroomCode, pin) => {
+    try {
+      // O payload casa exatamente com o StudentCreate do Pydantic no backend
+      const response = await api.post('/students/', {
+        name: name,
+        matricula: enrollment,
+        classroom_code: classroomCode,
+        pin: pin
       });
       return response.data;
     } catch (error) {
-      console.error("erro no login do aluno:", error);
+      console.error("Erro no cadastro do aluno:", error);
       throw error;
     }
   },
 
-  // login do professor: FastAPI espera um FORMULARIO na rota /auth/login
-  teacherLogin: async (email, password) => {
+  registerTeacher: async (name, email, password) => {
     try {
-      // monta os dados simulando um formulário HTML clássico
-      const params = new URLSearchParams();
-      params.append('username', email); // FastAPI exige que a chave seja 'username'
-      params.append('password', password);
-
-      // envia forçando o cabeçalho de formulário (urlencoded)
-      const response = await api.post('/auth/login', params, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
+      // O payload casa exatamente com o TeacherCreate do backend
+      const response = await api.post('/teachers/', {
+        name: name,
+        email: email,
+        password: password
       });
-      
       return response.data;
     } catch (error) {
-      console.error("erro no login do professor:", error);
+      console.error("Erro no cadastro do professor:", error);
       throw error;
     }
   }

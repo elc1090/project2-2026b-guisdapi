@@ -181,7 +181,14 @@ function Dashboard() {
             [ TURMA: WEB-2026 ]
           </div>
           <div className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors">
-            <span>&gt; GUILHERME</span>
+            <div 
+            onClick={() => { localStorage.removeItem('@DesafioDoDia:token'); navigate('/login'); }}
+            className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors"
+          >
+            <span className="truncate max-w-[150px] uppercase">
+              &gt; {timelineData?.student_name || 'ALUNO'}
+            </span>
+          </div>
             <div className="bg-current text-black h-5 w-5 flex items-center justify-center text-[10px]">👤</div>
           </div>
         </div>

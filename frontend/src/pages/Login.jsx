@@ -3,35 +3,58 @@ import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 
 export default function Login() {
-  const navigate = useNavigate();  
+  const navigate = useNavigate();
+  
+  // Modos e Papéis
+  const [isLoginMode, setIsLoginMode] = useState(true); // true = Login, false = Cadastro
   const [role, setRole] = useState('student');
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
+  
+  // Campos do Formulário
+  const [name, setName] = useState(''); // Usado apenas no cadastro
+  const [identifier, setIdentifier] = useState(''); // Matrícula (aluno) ou Email (professor)
+  const [password, setPassword] = useState(''); // PIN (aluno) ou Senha (professor)
+  const [classroomCode, setClassroomCode] = useState(''); // Usado apenas no cadastro de aluno
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleLogin = async (e) => {
+  // Limpa os campos quando troca de aba ou modo
+  const resetFields = () => {
+    setIdentifier(''); setPassword(''); setName(''); setClassroomCode(''); setErrorMsg('');
+  };
+
+  const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
 
     try {
+      // MODO CADASTRO
+      if (!isLoginMode) {
+        if (role === 'student') {
+          await authService.registerStudent(name, identifier, classroomCode, password);
+        } else {
+          await authService.registerTeacher(name, identifier, password);
+        }
+        // Após cadastrar, fazemos o login automaticamente por baixo dos panos! (Melhor UX)
+      }
+
+      // MODO LOGIN (Ou Auto-Login após cadastro)
       let data;
       if (role === 'student') {
         data = await authService.studentLogin(identifier, password);
         localStorage.setItem('@DesafioDoDia:token', data.access_token);
-        
-        navigate('/dashboard'); 
-        
+        navigate('/dashboard');
       } else {
         data = await authService.teacherLogin(identifier, password);
         localStorage.setItem('@DesafioDoDia:token', data.access_token);
-        
-        navigate('/teacher-dashboard'); 
+        navigate('/teacher-dashboard');
       }
-      
+
     } catch (error) {
-      setErrorMsg('ERRO: CREDENCIAIS INVÁLIDAS OU CORROMPIDAS.');
+      // Se for erro do backend (ex: matrícula já existe), o Axios coloca a mensagem em error.response.data.detail
+      const backendError = error.response?.data?.detail;
+      setErrorMsg(backendError ? `ERRO: ${backendError}` : 'ERRO: CREDENCIAIS INVÁLIDAS OU CORROMPIDAS.');
     } finally {
       setLoading(false);
     }
@@ -95,7 +118,7 @@ export default function Login() {
         </div>
 
         {/* formulario de dados */}
-        <form onSubmit={handleLogin} className="p-8 flex flex-col gap-6 bg-black">
+        <form onSubmit={handleAuth} className="p-8 flex flex-col gap-6 bg-black">
           
           {errorMsg && (
             <div className="bg-[var(--color-cyber-magenta)] text-white font-mono font-bold p-3 text-center text-sm uppercase tracking-widest animate-pulse border-2 border-white">
@@ -103,6 +126,24 @@ export default function Login() {
             </div>
           )}
 
+          {/* CAMPO: NOME (Só aparece no cadastro) */}
+          {!isLoginMode && (
+            <div className="flex flex-col gap-2 animate-fade-in-up">
+              <label className="font-mono font-bold text-xs tracking-widest text-[var(--color-acid-green)] uppercase">
+                &gt; NOME COMPLETO
+              </label>
+              <input 
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: Guilherme S. Dapieve"
+                required
+                className="bg-transparent border-[3px] border-[var(--color-acid-green)] text-white p-4 font-mono font-bold text-lg focus:outline-none focus:bg-[#002200] transition-colors"
+              />
+            </div>
+          )}
+
+          {/* CAMPO: MATRÍCULA OU EMAIL */}
           <div className="flex flex-col gap-2">
             <label className="font-mono font-bold text-xs tracking-widest text-[var(--color-acid-green)] uppercase">
               &gt; {role === 'student' ? 'MATRÍCULA' : 'E-MAIL'}
@@ -117,28 +158,56 @@ export default function Login() {
             />
           </div>
 
+          {/* CAMPO: CÓDIGO DA TURMA (Só aparece no cadastro de aluno) */}
+          {!isLoginMode && role === 'student' && (
+            <div className="flex flex-col gap-2 animate-fade-in-up">
+              <label className="font-mono font-bold text-xs tracking-widest text-[var(--color-acid-green)] uppercase">
+                &gt; CÓDIGO DE CONVITE DA TURMA
+              </label>
+              <input 
+                type="text"
+                value={classroomCode}
+                onChange={(e) => setClassroomCode(e.target.value)}
+                placeholder="Ex: X7Y8Z9"
+                required
+                maxLength={6}
+                className="bg-transparent border-[3px] border-[var(--color-acid-green)] text-white p-4 font-mono font-bold text-lg focus:outline-none focus:bg-[#002200] transition-colors"
+              />
+            </div>
+          )}
+
+          {/* CAMPO: PIN OU SENHA */}
           <div className="flex flex-col gap-2">
             <label className="font-mono font-bold text-xs tracking-widest text-[var(--color-acid-green)] uppercase">
-              &gt; {role === 'student' ? 'PIN_CODE' : 'PASSWORD'}
+              &gt; {role === 'student' ? 'PIN_CODE (4 DÍGITOS)' : 'PASSWORD'}
             </label>
             <input 
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••"
+              placeholder="****"
               maxLength={role === 'student' ? 4 : undefined}
               required
               className="bg-transparent border-[3px] border-[var(--color-acid-green)] text-white p-4 font-mono font-bold text-lg focus:outline-none focus:bg-[#002200] transition-colors placeholder:text-gray-600"
             />
           </div>
 
-          {/* botao com rotacao contraria (rotate-1) gerando o caos controlado do acid graphic */}
+          {/* BOTAO PRINCIPAL */}
           <button 
             type="submit"
             disabled={loading}
-            className="mt-6 bg-[var(--color-acid-green)] text-black border-[4px] border-[var(--color-acid-green)] py-4 font-display font-black text-2xl uppercase tracking-widest hover:bg-[var(--color-cyber-cyan)] hover:border-[var(--color-cyber-cyan)] hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_var(--color-cyber-magenta)] transition-all disabled:opacity-50 rotate-1"
+            className="mt-4 bg-[var(--color-acid-green)] text-black border-[4px] border-[var(--color-acid-green)] py-4 font-display font-black text-2xl uppercase tracking-widest hover:bg-[var(--color-cyber-cyan)] hover:border-[var(--color-cyber-cyan)] hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_var(--color-cyber-magenta)] transition-all disabled:opacity-50 rotate-1"
           >
-            {loading ? 'INICIANDO...' : 'ACESSAR_'}
+            {loading ? 'PROCESSANDO...' : isLoginMode ? 'ACESSAR_' : 'CRIAR_REGISTRO'}
+          </button>
+
+          {/* BOTAO PARA ALTERNAR ENTRE LOGIN E CADASTRO */}
+          <button
+            type="button"
+            onClick={() => { setIsLoginMode(!isLoginMode); resetFields(); }}
+            className="font-mono text-sm text-gray-400 hover:text-[var(--color-cyber-magenta)] uppercase tracking-widest transition-colors mt-2"
+          >
+            {isLoginMode ? '[ NÃO TEM CONTA? CADASTRAR_ ]' : '[ JÁ TEM CONTA? LOGIN_ ]'}
           </button>
         </form>
 

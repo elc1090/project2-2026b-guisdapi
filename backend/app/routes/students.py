@@ -102,6 +102,7 @@ async def get_my_timeline(student_data: dict = Depends(get_current_student_data)
         })
         
     return {
+        "student_name": student.get("name", "Aluno Desconhecido"),
         "streak": student.get("streak", 0),
         "history": history
     }
