@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { challengesService } from '../services/challengesService';
+import { studentService } from '../services/studentService';
 
 const ITEM_WIDTH = 48; 
 const ITEM_GAP = 12; 
@@ -36,6 +37,25 @@ function Dashboard() {
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [visibleCount, setVisibleCount] = useState(MAX_VISIBLE);
+
+  // Estados do Modal de Ranking
+  const [isRankingOpen, setIsRankingOpen] = useState(false);
+  const [rankingData, setRankingData] = useState([]);
+  const [loadingRanking, setLoadingRanking] = useState(false);
+
+  // Função para buscar os dados e abrir o modal
+  const handleOpenRanking = async () => {
+    setLoadingRanking(true);
+    setIsRankingOpen(true); // Abre a janela na hora para mostrar o "loading"
+    try {
+      const data = await studentService.getRanking();
+      setRankingData(data);
+    } catch (error) {
+      alert("ERRO_ Não foi possível acessar o ranking da turma.");
+    } finally {
+      setLoadingRanking(false);
+    }
+  };
 
   const recalcVisibleCount = useCallback(() => {
     if (!wrapperRef.current) return;
@@ -147,6 +167,28 @@ function Dashboard() {
             <div className="bg-current text-black h-5 w-5 flex items-center justify-center text-[10px]">👤</div>
           </div>
         </div>
+        
+        <div className="flex items-center gap-4 font-mono font-bold text-xs tracking-widest uppercase flex-wrap justify-end">
+          {/* BOTÃO DO RANKING */}
+          <button 
+            onClick={handleOpenRanking}
+            className="flex items-center h-10 border-[3px] border-yellow-400 bg-yellow-400 text-black px-4 hover:bg-transparent hover:text-yellow-400 transition-colors shadow-[4px_4px_0px_0px_rgba(250,204,21,0.5)]"
+          >
+            [ RANKING ]
+          </button>
+
+          <div className="flex items-center h-10 border-[3px] border-[var(--color-acid-green)] bg-black text-[var(--color-acid-green)] px-4 hidden md:flex">
+            [ TURMA: ATIVA ]
+          </div>
+          
+          <div 
+            onClick={() => { localStorage.removeItem('@DesafioDoDia:token'); navigate('/login'); }}
+            className="flex items-center h-10 gap-3 border-[3px] border-[var(--color-cyber-magenta)] bg-black text-[var(--color-cyber-magenta)] px-4 cursor-pointer hover:bg-[var(--color-cyber-magenta)] hover:text-white transition-colors"
+          >
+            <span>&gt; SAIR</span>
+          </div>
+        </div>
+
       </header>
 
       <div ref={wrapperRef} className="relative z-10 w-full flex justify-center mb-12 px-8">
@@ -346,6 +388,53 @@ function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* MODAL DE RANKING */}
+      {isRankingOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-black border-[4px] border-yellow-400 shadow-[8px_8px_0px_0px_yellow-400] p-6 md:p-8 max-w-md w-full relative animate-fade-in-up">
+            
+            <button 
+              onClick={() => setIsRankingOpen(false)}
+              className="absolute top-4 right-4 text-yellow-400 font-mono font-bold text-xl hover:text-white"
+            >
+              [X]
+            </button>
+
+            <h2 className="font-display text-3xl font-black uppercase text-yellow-400 mb-6 tracking-tighter">
+              LEADERBOARD_
+            </h2>
+
+            {loadingRanking ? (
+              <p className="font-mono text-yellow-400 animate-pulse uppercase">CARREGANDO_DADOS...</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {rankingData.length === 0 ? (
+                  <p className="font-mono text-gray-500 uppercase">NENHUM ALUNO RANQUEADO AINDA.</p>
+                ) : (
+                  rankingData.map((student, index) => (
+                    <div key={index} className={`flex items-center justify-between p-3 border-[2px] ${index === 0 ? 'border-yellow-400 bg-[#332200]' : 'border-[#333] bg-[#050505]'}`}>
+                      <div className="flex items-center gap-4">
+                        <span className={`font-display font-black text-xl ${index === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                          #{index + 1}
+                        </span>
+                        <span className="font-mono font-bold text-white uppercase truncate max-w-[120px] md:max-w-[200px]">
+                          {student.name}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="font-mono font-bold text-[var(--color-cyber-cyan)] text-sm">{student.score} XP</span>
+                        <span className="font-mono text-xs text-orange-500">{student.streak} 🔥</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
