@@ -2,7 +2,7 @@
 
 # Projeto: Aplicação com persistência de dados em backend
 
-![Falta colocar GIF](./moho_follow_through2.gif "GIF animado do projeto")
+<img width="1280" height="720" alt="Adobe Express - projeto2web" src="https://github.com/user-attachments/assets/76a6c477-beeb-4591-933e-b83d91f18663" />
 
 ## Acesso
 
