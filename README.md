@@ -29,7 +29,9 @@ Parceria: Guilherme de Cezaro Martini
 
 ## Feedback/comentário da parceria/cliente/usuário
 
-
+Achei a estética muito bonita e diferente da aplicação original, tentando deixar mais "cyber" conforme foi pedido, achei muito bem executado. Uma coisa que achei muito boa foi a autenticação onde é separado por professor ou aluno e o aluno deve inserir uma turma.
+Outras funcionalidades foram cumpridas muito bem também, com presença de streak, estatisticas e leaderboard.
+No geral achei que foi bem executado e por mais que tenha sido inspirado no jogo já existente, parece muito original.
 
 ## Desenvolvimento
 
