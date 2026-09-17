@@ -142,7 +142,7 @@ No frontend, a separação entre o engajamento educacional e a parte disciplinar
 - Documentação do MongoDB / Motor (driver assíncrono)
 - Documentação do Tailwind CSS
 - Swagger UI, gerado automaticamente pelo FastAPI, usado para testar e validar as rotas durante o desenvolvimento
-- Inspiração na aplicação web [Challenge of the Day](https://github.com/elc1090/demo-challenge-of-the-day) desenvolvida pela professora Andrea Schwertner Charão.
+- Inspiração na aplicação web [Challenge of the Day](https://github.com/elc1090/demo-challenge-of-the-day) desenvolvida pela professora Andrea Schwertner Charão
 
 ---
 
