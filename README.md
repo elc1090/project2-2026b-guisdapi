@@ -10,7 +10,7 @@ https://project2-2026b-guisdapi.vercel.app/
 
 ## Desenvolvedor(a)
 
-Nome: Guilherme Serafini Dapieve
+Nome: Guilherme Serafini Dapieve  
 Curso: Sistemas da Informação
 
 ## Proposta
